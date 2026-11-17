@@ -9,13 +9,14 @@
     301-308  Strobe keys         (FS Bumps "Strobe", Flash)
     201-208  Group masters       (the group itself on the fader, at 100 % when newly assigned)
     101-108  Bump keys           (FS Bumps "Bump", Temp)
-    191-198  X-Keys              (FS Bumps "X-Key", Temp)
+    191-198  X-keys              (FS LOS bank 1's 8 bumps, Temp; bank 2 on the next page's
+                                  X-keys, and so on)
     110      Strobe All          (FS Bumps "ALL Strobe", Temp)
     210 / 209 / 409 / 410 / 211  Speed masters 1-5 (DimFX, PosFX, ColorFX, Bump speed, Bump rate)
     next page 209 / 210          Playback masters 1 / 2 (DimFX level, Bump level)
 
-  The keys are FS Bumps' own sequences, found by name ("FS BS <group name> Bump" ...), so run
-  FS Bumps first; this tool only places them. The masters get FireSystem's names. An executor that
+  The keys are FS Bumps' and FS LOS's own sequences, found by name ("FS BS <group name> Bump",
+  "FS LO LOS1 All >" ...), so run those first; this tool only places them. The masters get FireSystem's names. An executor that
   holds something that isn't FireSystem's ("FS ..." or one of the groups) is left alone and listed.
   The show doesn't need the plugin afterwards.
 
@@ -35,8 +36,10 @@ local ROWS = {
   {"Rnd", 400, "Flash"},
   {"Strobe", 300, "Flash"},
   {"Bump", 100, "Temp"},
-  {"X-Key", 190, "Temp"},
 }
+-- FS LOS's bumps per bank, on the X-keys (bank b on page + b - 1)
+local LOS = {"All >", "All <", "Odd", "Even", "1/3", "2/3", "3/3", "Chase"}
+local LOS_BASE, LOS_BANKS = 190, 4
 local STROBE_ALL = {"ALL Strobe", 110, "Temp"}
 local GROUP_BASE = 200
 -- {executor, kind, number, page offset}: as FireSystem's CFG.MASTER_EXECS
@@ -96,16 +99,22 @@ local function buildMasters(E, groups, pg)
     if h then pcall(function() h.Key = key ok = tostring(h.Key) == key end) end
     if not ok then E.C('Set Page %d.%d Property "Key" "%s"', p, ex, key) end
   end
-  local function key(label, ex, k)
-    local h = E.obj(string.format('Sequence "%s %s %s"', E.CFG.PREFIX, "BS", label))
-    local no
+  local function seqNamed(name)
+    local h, no = E.obj(string.format('Sequence "%s"', name)), nil
     if h then pcall(function() no = tonumber(h.no) end) end
     if h and not no then pcall(function() no = tonumber(h.No) end) end
-    if not no then missing[#missing + 1] = label return end
-    if not free(pg, ex, "Sequence", no) then return end
-    E.C("Assign Sequence %d At Page %d.%d", no, pg, ex)
-    setKey(pg, ex, k)
+    return no
+  end
+  local function put(no, p, ex, k)
+    if not free(p, ex, "Sequence", no) then return end
+    E.C("Assign Sequence %d At Page %d.%d", no, p, ex)
+    setKey(p, ex, k)
     placed = placed + 1
+  end
+  local function key(label, ex, k)
+    local no = seqNamed(E.CFG.PREFIX .. " BS " .. label)
+    if not no then missing[#missing + 1] = label return end
+    put(no, pg, ex, k)
   end
 
   for gi, g in ipairs(groups) do
@@ -122,6 +131,18 @@ local function buildMasters(E, groups, pg)
     end
   end
   key(STROBE_ALL[1], STROBE_ALL[2], STROBE_ALL[3])
+
+  -- the X-keys: FS LOS's bumps, a bank per page
+  local banks = 0
+  for b = 1, LOS_BANKS do
+    local nos = {}
+    for i, name in ipairs(LOS) do nos[i] = seqNamed(string.format("%s LO LOS%d %s", E.CFG.PREFIX, b, name)) end
+    if not nos[1] then break end
+    banks = b
+    local p = pg + b - 1
+    if not E.obj("Page " .. p) then E.C("Store Page %d", p) end
+    for i = 1, #LOS do if nos[i] then put(nos[i], p, LOS_BASE + i, "Temp") end end
+  end
 
   -- the masters, with FireSystem's names
   for _, m in ipairs(MASTERS) do
@@ -149,6 +170,12 @@ local function buildMasters(E, groups, pg)
 
   svar("groups", E.rangeList({table.unpack(groups)})) svar("page", pg)
   local lines = {string.format("Page %d: %d executors for %d groups (playback masters on page %d).", pg, placed, #groups, pg + 1)}
+  if banks > 0 then
+    lines[#lines + 1] = string.format("X-keys: FS LOS bank%s 1%s on page%s %d%s.", banks > 1 and "s" or "",
+      banks > 1 and ("-" .. banks) or "", banks > 1 and "s" or "", pg, banks > 1 and ("-" .. (pg + banks - 1)) or "")
+  else
+    lines[#lines + 1] = "\nNo FS LOS bumps in the show yet: run FS LOS, then run " .. TITLE .. " again to put them on the X-keys."
+  end
   if #missing > 0 then
     lines[#lines + 1] = string.format("\n%d FS Bumps keys aren't in the show yet (first: %s). Run FS Bumps for these groups, then run %s again.",
       #missing, missing[1], TITLE)
@@ -170,7 +197,8 @@ local function main(displayHandle, argument)
   local r = MessageBox({
     title = TITLE,
     message = "Groups for columns 1-8 (up to 8), e.g. 1 Thru 8, and the executor page to fill (FireSystem uses page 1;\n" ..
-              "the playback masters go on the page after it). The keys are FS Bumps' sequences: run FS Bumps first.",
+              "the playback masters go on the page after it). The keys are FS Bumps' sequences and the X-keys FS LOS's bumps:\n" ..
+              "run those first.",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
     inputs = {
       {name = "Groups", value = defaultGroups(E, VARP .. "groups"), whiteFilter = "0123456789 ,+-ThruTHRU"},
