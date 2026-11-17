@@ -10406,6 +10406,23 @@ local function mxButtons(E, o)
 end
 
 
+-- a Goto list: Sequence seq with an empty cue per item {name, ap, cmd} (the sequence is made fresh
+-- and placed by the caller: deleting it here would take it off the layout)
+local function listSeq(E, seq, label, items, apSeq)
+  for k, it in ipairs(items) do
+    E.C("ClearAll")
+    E.C("Store Sequence %d Cue %d /Overwrite", seq, k)
+    E.C("Label Sequence %d Cue %d %s", seq, k, E.q(it.name))
+    E.C("Assign Appearance %d At Sequence %d Cue %d", it.ap, seq, k)
+    E.Cany({ string.format("Assign Appearance %d At Sequence %d Cue %d Part 0", it.ap, seq, k) })
+    cueCmd(E, seq, k, it.cmd)
+  end
+  E.C("Label Sequence %d %s", seq, E.q(label))
+  setProp(E, "Sequence " .. seq, "PreferCueAppearance", "Yes")
+  E.C("Assign Appearance %d At Sequence %d", apSeq, seq)
+end
+
+
 -- the pickers: {button text, short text for the pick}; group rows have all, ALL has Zoom / Focus
 local PICKS = { {"Gobo 1", "G1"}, {"Gobo Spin", "Spin"}, {"Gobo 2", "G2"}, {"Prism", "Prism"}, {"Prism Spin", "Spin"},
                 {"Shutter", "Shutter"}, {"Iris", ""}, {"Frost", ""}, {"Zoom", ""}, {"Focus", ""} }
