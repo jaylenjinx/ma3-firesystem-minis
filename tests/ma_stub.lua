@@ -3,7 +3,8 @@
 -- (stub.cmds holds every Cmd() string) and return harmless values. Tests and the smoke run use it
 -- through ma_stub.load("FSPresets"), which runs plugins/FSPresets.lua the way MA does.
 -- stub.objects["Group 1"] = true makes ObjectList find that object (nothing exists otherwise);
--- a string value is the object's name (stub.objects["Layout 1"] = "FS CP Layout" is a tool's own).
+-- a string value is the object's name (stub.objects["Layout 1"] = "FS CP Layout" is a tool's own),
+-- and ObjectList('Sequence "name"') finds it by that name.
 local M = {}
 
 local function nothing() return nil end
@@ -63,6 +64,14 @@ function M.new()
     return h
   end
   G.ObjectList = function(path)
+    -- by name: Sequence "FS BS Front Bump"
+    local kind, name = path:match('^(%a+) "(.*)"$')
+    if kind then
+      for p, v in pairs(stub.objects) do
+        if v == name and p:match("^(%a+) ") == kind then return {handle(p)} end
+      end
+      return {}
+    end
     local h = handle(path)
     if h then return {h} end
     return {}
