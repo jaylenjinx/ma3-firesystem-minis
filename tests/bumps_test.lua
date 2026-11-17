@@ -83,3 +83,10 @@ test("FS Bumps: Master puts a group at Full on the bump and every step", functio
   local off = cueCmd(stub, m, 1)
   t.ok(off and off:find("Selection", 1, true), "Master Off doesn't clear the line")
 end)
+
+test("FS Bumps: no X-Key keys or X-Key pickers (the X-keys play FS LOS)", function()
+  local stub = build()
+  for _, c in ipairs(stub.cmds) do
+    t.ok(not c:find("X-Key", 1, true), "still makes an X-Key: " .. c)
+  end
+end)

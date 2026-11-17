@@ -119,7 +119,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <a class="card" href="#dimmer"><b>FS Dimmer FX</b><span>Levels and dimmer chases per group</span></a>
       <a class="card" href="#colourfx"><b>FS Colour FX</b><span>Colour chases from up to 5 picked colours</span></a>
       <a class="card" href="#gobo"><b>FS Gobo Beam</b><span>Gobo, prism, spin, shutter, iris, frost, zoom, focus</span></a>
-      <a class="card" href="#bumps"><b>FS Bumps</b><span>Bump, Go+ step, strobe and X-Key keys with live look pickers</span></a>
+      <a class="card" href="#bumps"><b>FS Bumps</b><span>Bump, Go+ step and strobe keys with live look pickers</span></a>
       <a class="card" href="#los"><b>FS LOS</b><span>Live Output System bumps, StartShow style</span></a>
       <a class="card" href="#masters"><b>FS Masters</b><span>FireSystem&#39;s executor page 1: keys, group masters, speed masters</span></a>
     </div>
@@ -218,15 +218,14 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
     <section class="tool" id="bumps">
       <h2>FS Bumps</h2>
       <p class="file">FSBumps.xml</p>
-      <figure><img src="img/FSBumps.png" alt="Bumps layout: Bump, Strobe, Rnd and X-Key keys, look pickers, Part, Fade, Delay, Wings, Out and X-Key pattern and form per group" loading="lazy"><figcaption>Keys on the left, the bump look in the middle, timing and X-Key settings on the right.</figcaption></figure>
+      <figure><img src="img/FSBumps.png" alt="Bumps layout: Bump, Steps, Strobe and Rnd keys, look pickers, step pickers, Part, Fade, Delay, Wings and Out per group" loading="lazy"><figcaption>Keys on the left, the bump look in the middle, steps and timing on the right.</figcaption></figure>
       <ul class="points">
-        <li><b>Keys (on while held):</b> Bump, Strobe, Rnd and X-Key per group; Bump All, Strobe All, Rnd All and X-Key All on top.</li>
+        <li><b>Keys (on while held):</b> Bump, Strobe and Rnd per group; Bump All, Strobe All and Rnd All on top. The X-keys are left for FS LOS.</li>
         <li><b>Steps (Go+):</b> each press plays the row's next step, up to 3 (Step Count). Each step has its own look; Edit Step picks which one the look pickers change. A step releases itself after Hold, so fast hits overlap.</li>
         <li><b>Master:</b> puts a group you pick, such as the main fixtures of pixel cells, at Full with the bump and its steps.</li>
         <li><b>Bump look:</b> each group's own preset, one line per look. Dim, Color, Gobo, Prism, Iris, Shutter, Zoom and Pos are Goto lists, and a change plays straight away, even mid-bump.</li>
         <li><b>Part:</b> All, Odd, Even, Left, Right or a third of the group. <b>Fade</b> in, <b>Delay</b> and <b>Wings</b> spread it, <b>Out</b> is the release fade.</li>
         <li><b>Strobe / Rnd:</b> Full plus the group's strobe or random strobe from its fixture profile (LED fixtures get a dimmer chase).</li>
-        <li><b>X-Key:</b> a dimmer chase with its own pattern (In, Random, Out, Odd/Even, Right, Blocks, Left, All) and form, on Speed 4 by default.</li>
       </ul>
     </section>
 
@@ -247,7 +246,8 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <p class="file">FSMasters.xml</p>
       <ul class="points">
         <li>Fills an executor page the way FireSystem&#39;s page 1 is laid out, with columns 1 to 8 for the groups.</li>
-        <li>401&ndash;408 Rnd strobe, 301&ndash;308 Strobe (Flash), 201&ndash;208 group masters, 101&ndash;108 Bump and 191&ndash;198 X-Keys (Temp), 110 Strobe All. The keys are FS Bumps&#39; own, so run FS Bumps first.</li>
+        <li>401&ndash;408 Rnd strobe, 301&ndash;308 Strobe (Flash), 201&ndash;208 group masters, 101&ndash;108 Bump (Temp), 110 Strobe All. The keys are FS Bumps&#39; own, so run FS Bumps first.</li>
+        <li>The X-keys 191&ndash;198 play FS LOS bank 1&#39;s 8 bumps (Temp); bank 2 goes on the next page&#39;s X-keys, and so on. Run FS LOS first.</li>
         <li>Speed masters 1&ndash;5 on 210, 209, 409, 410 and 211, and playback masters 1 and 2 on 209 and 210 of the next page, named as in FireSystem.</li>
         <li>An executor that holds something else is left as it is and listed.</li>
       </ul>
