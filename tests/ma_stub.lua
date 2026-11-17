@@ -64,7 +64,17 @@ function M.new()
     return h
   end
   G.ObjectList = function(path)
-    -- by name: Sequence "FS BS Front Bump"
+    -- by name: Sequence "FS BS Front Bump"; Sequence "FS DF Front "* = every name starting so
+    local wk, prefix = path:match('^(%a+) "(.*)"%*$')
+    if wk then
+      local l = {}
+      for p, v in pairs(stub.objects) do
+        if type(v) == "string" and v:sub(1, #prefix) == prefix and p:match("^(%a+) ") == wk then l[#l + 1] = {p, handle(p)} end
+      end
+      table.sort(l, function(a, b) return a[1] < b[1] end)
+      for i, x in ipairs(l) do l[i] = x[2] end
+      return l
+    end
     local kind, name = path:match('^(%a+) "(.*)"$')
     if kind then
       for p, v in pairs(stub.objects) do
