@@ -6,10 +6,11 @@
   One of the single-purpose FireSystem tools. Run it (click it in the Plugins pool) and it asks for
   the groups (up to 8) and the pool numbers, then builds a layout with an ALL row and one row per group:
 
-    [group] [Bump] [Strobe] [Rnd] [X-Key]   [Dim] [Color] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]
-            [Part] [Fade] [Delay] [Wings] [Out]   [X-Key pattern] [X-Key form]
+    [group] [Bump] [Steps] [Strobe] [Rnd] [X-Key]   [Dim] [Color] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]
+            [Edit Step] [Step Count] [Hold] [Master]   [Part] [Fade] [Delay] [Wings] [Out]
+            [X-Key pattern] [X-Key form]
 
-  The keys (Temp: on while held):
+  The keys (Temp: on while held; Steps is Go+):
   - Bump plays the row's bump look: one recipe line (the group At its own bump preset, an All-pool
     preset "FS BS Bump <group>" with a line per look family). The look pickers (Dim ... Pos) are Goto
     lists: picking an entry points that family's line of the preset at an FS Presets preset (Off
@@ -17,6 +18,12 @@
     Shutter list the group's own fixture type's slots. The row's MAtricks (Part = All / Odd / Even /
     Left / Right / thirds, Delay, Wings) sit on the bump's line; Fade = the bump's fade in, Out = its
     release (OffCue) fade;
+  - Steps (Go+): each press plays the row's next step (up to 3, Step Count), as FireSystem's Go+
+    bumps: a step is its own sequence (cue 1 = the step's preset, which also says which step comes
+    next; cue 2 follows after Hold and switches the step off over Out), so fast hits overlap. Edit
+    Step picks which step's preset the look pickers change (step 1 = the Bump key's look). Master
+    puts a group of your choice at Full with the bump and every step (e.g. the main fixtures of
+    pixel cells), through a "Master" recipe line;
   - Strobe / Rnd: the group at Full with its strobe / random strobe (FS Presets' per-group strobe
     presets, from the fixture profile's shutter; LED fixtures get a dimmer chase);
   - X-Key: the group's dimmer chase (an FS Presets Dimmer FX form, Square 1 at first) with its own
@@ -10407,22 +10414,31 @@ end
 
 
 -- the keys: {button text, kind}
-local KEYS = { {"Bump", "bump"}, {"Strobe", "strobe"}, {"Rnd", "rnd"}, {"X-Key", "xk"} }
+local KEYS = { {"Bump", "bump"}, {"Steps", "steps"}, {"Strobe", "strobe"}, {"Rnd", "rnd"}, {"X-Key", "xk"} }
+local J_BUMP, J_STEPS, J_XK = 1, 2, 5
 -- the bump look families: {line name in the bump preset, button text}
 local FAMS = { {"Dimmer", "Dim"}, {"Color", "Color"}, {"Gobo", "Gobo"}, {"Prism", "Prism"},
                {"Iris", "Iris"}, {"Shutter", "Shutter"}, {"Zoom", "Zoom"}, {"Position", "Pos"} }
 -- Part: which part of the group the bump lights (X MAtricks; Left / Right = the group's halves)
 local PARTS = { {"All"}, {"Odd", 2, 1}, {"Even", 2, 2}, {"Left", 2, 1, true}, {"Right", 2, 2, true},
                 {"1/3", 3, 1}, {"2/3", 3, 2}, {"3/3", 3, 3} }
-local OUTS = {0, 0.5, 1, 2}   -- release fades
--- per row: the 4 keys, the 8 look pickers, Part, X-Key pattern, X-Key form, Out
-local NPR = #KEYS + #FAMS + 4
-local J_PART, J_PAT, J_FORM, J_OUT = #KEYS + #FAMS + 1, #KEYS + #FAMS + 2, #KEYS + #FAMS + 3, #KEYS + #FAMS + 4
+local OUTS = {0, 0.5, 1, 2}     -- release fades
+local HOLDS = {0.2, 0.5, 1, 2}  -- how long a Go+ step stays on before it releases itself
+local NSTEP = 3                 -- Go+ steps per group
+local STRIDE = 8                -- bump presets: step k of group gi = first + (k - 1) * 8 + gi - 1
+-- per row: the keys, the 8 look pickers, Part, X-Key pattern, X-Key form, Out, Edit Step, Step
+-- Count, Master, Hold, then the 3 step sequences (played by the Steps key, not on the layout)
+local J0 = #KEYS + #FAMS
+local J_PART, J_PAT, J_FORM, J_OUT = J0 + 1, J0 + 2, J0 + 3, J0 + 4
+local J_EDIT, J_CNT, J_MST, J_HOLD = J0 + 5, J0 + 6, J0 + 7, J0 + 8
+local J_STEP1 = J0 + 9   -- J_STEP1 .. J_STEP1 + NSTEP - 1
+local NPR = J0 + 8 + NSTEP
 local MXL = mxList("Fade", "Delay", "Wings")
 local MXV = {Fade = {"Off", 0.2, 0.5, 1}, Delay = {"Off", 0.25, 0.5, 1}, Wings = {"Off", 2, 4}}
 local NMX = #MXL
 local AP_N = 7   -- appearances (+ one per colour): key, strobe key, picker off / on, idle, lit, X-Key
-local COL = {keys = 1, looks = 5.25, part = 13.5, mx = 14.5, out = 17.5, pat = 18.75, form = 19.75}
+local COL = {keys = 1, looks = 6.25, edit = 14.5, cnt = 15.5, hold = 16.5, mst = 17.5, part = 18.75, mx = 19.75,
+             out = 22.75, pat = 24, form = 25}
 
 local function minePreset(E, no)
   local h = E.obj("Preset 21." .. no)
@@ -10439,12 +10455,12 @@ local function ask(E, nC)
   end
   local nSeq = (rows + 1) * (NPR + NMX)
   local pre = tonumber(gvar("preset") or "")
-  if not pre then pre = 911 while pre < 9990 and not (minePreset(E, pre) and minePreset(E, pre + 7)) do pre = pre + 1 end end
+  if not pre then pre = 911 while pre < 9970 and not (minePreset(E, pre) and minePreset(E, pre + NSTEP * STRIDE - 1)) do pre = pre + 1 end end
   local r = MessageBox({
     title = TITLE,
     message = "Groups for the bump rows (up to 8), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
               "The numbers below are where the layout, its sequences, appearances, MAtricks and the bump presets\n" ..
-              string.format("(All pool, one per group) go: %d sequences, %d appearances, %d MAtricks.\n", nSeq, AP_N + nC, 2 * rows) ..
+              string.format("(All pool, 3 steps per group) go: %d sequences, %d appearances, %d MAtricks.\n", nSeq, AP_N + nC, 2 * rows) ..
               "Speed master: the one the X-Key chases follow (0 = none).",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
     inputs = {
@@ -10544,7 +10560,7 @@ local function groupSize(E, g)
   return math.max(n, 2)
 end
 
--- a key: Sequence seq, cue 1 = recipe lines {{group, "pool.no", MAtricks or nil}, ...}
+-- a key: Sequence seq, cue 1 = recipe lines {{group or nil, "pool.no", MAtricks or nil, name = line name}, ...}
 local function keySeq(E, seq, label, lines, ap)
   if E.obj("Sequence " .. seq) then E.C("Delete Sequence %d /NC", seq) end
   E.C("ClearAll")
@@ -10552,9 +10568,10 @@ local function keySeq(E, seq, label, lines, ap)
   for i, l in ipairs(lines) do
     local a = string.format("Sequence %d Cue 1 Part 0.%d", seq, i)
     E.C('Store Type "StandardRecipe" %s', a)
-    E.C("Assign Group %d At %s", l[1], a)
+    if l[1] then E.C("Assign Group %d At %s", l[1], a) end
     E.C("Assign Preset %s At %s", l[2], a)
     if l[3] then E.C("Assign MAtricks %d At %s", l[3], a) end
+    if l.name then E.C('Set %s Property "Name" "%s"', a, l.name) end
     E.C('Set %s Property "Enabled" "Yes"', a)
   end
   E.C("Label Sequence %d %s", seq, E.q(label))
@@ -10594,7 +10611,10 @@ local function buildBumps(E, groups, o)
   for k = seq0, seq0 + nSeq - 1 do if not mine(E, "Sequence", k) then clash[#clash + 1] = "Sequence " .. k end end
   for k = ap0, ap0 + AP_N + nC - 1 do if not mine(E, "Appearance", k) then clash[#clash + 1] = "Appearance " .. k end end
   for k = mx0, mx0 + 2 * nG - 1 do if not mine(E, "MAtricks", k) then clash[#clash + 1] = "MAtricks " .. k end end
-  for k = pre0, pre0 + nG - 1 do if not minePreset(E, k) then clash[#clash + 1] = "Preset 21." .. k end end
+  for k = 1, NSTEP do for gi = 1, nG do
+    local no = pre0 + (k - 1) * STRIDE + gi - 1
+    if not minePreset(E, no) then clash[#clash + 1] = "Preset 21." .. no end
+  end end
   if #clash > 0 then
     return nil, "These are already used by something else:\n  " .. table.concat(clash, "\n  ", 1, math.min(#clash, 10)) ..
       (#clash > 10 and "\n  ..." or "") .. "\n\nPick other numbers and run it again."
@@ -10622,30 +10642,62 @@ local function buildBumps(E, groups, o)
     makeMatricks(E, xmx(gi), P .. names[gi] .. " X-Key")
   end
   local function seqNo(b, j) return seq0 + b * NPR + (j - 1) end   -- b = 0: ALL
-  local function pre(gi) return pre0 + gi - 1 end
+  local function pre(gi, k) return pre0 + ((k or 1) - 1) * STRIDE + gi - 1 end
+  local function stepSeq(gi, k) return seqNo(gi, J_STEP1 + k - 1) end
+  local function V(k, gi) return VARP .. k .. gi end   -- a row's variable: FSBS_e1, FSBS_next1, ...
   local function textCmd(idx, text)
     return idx and string.format('Set Layout %d.%d Property "CustomTextText" %s', L, idx, E.q(text)) or nil
   end
   local function join(...) local t = {} for _, s in ipairs({...}) do if s and s ~= "" then t[#t + 1] = s end end return table.concat(t, "; ") end
 
-  -- the bump presets: a recipe line per look family (values set by the pickers)
+  -- the bump presets, one per step (step 1 is also the Bump key's look): a recipe line per look
+  -- family (values set by the pickers, which edit the step picked with Edit Step)
+  local full = looks(groups[1], "Dimmer")
+  for _, x in ipairs(full) do if x.name == "100%" then full.at = x.at end end
   for gi, g in ipairs(groups) do
-    E.C("ClearAll")
-    if E.obj("Preset 21." .. pre(gi)) then E.C("Delete Preset 21.%d /NC", pre(gi)) end
-    E.C("Store Preset 21.%d /Overwrite", pre(gi))
-    E.C("Label Preset 21.%d %s", pre(gi), E.q(P .. "Bump " .. names[gi]))
-    for k, f in ipairs(FAMS) do
-      local a = string.format("Preset 21.%d.%d", pre(gi), k)
-      E.C('Store Type "StandardRecipe" %s', a)
-      E.C("Assign Group %d At %s", g, a)
-      E.C('Set %s Property "Name" "%s"', a, f[1])
+    for st = 1, NSTEP do
+      local no = pre(gi, st)
+      E.C("ClearAll")
+      if E.obj("Preset 21." .. no) then E.C("Delete Preset 21.%d /NC", no) end
+      E.C("Store Preset 21.%d /Overwrite", no)
+      E.C("Label Preset 21.%d %s", no, E.q(P .. "Bump " .. names[gi] .. (st > 1 and (" Step " .. st) or "")))
+      for k, f in ipairs(FAMS) do
+        local a = string.format("Preset 21.%d.%d", no, k)
+        E.C('Store Type "StandardRecipe" %s', a)
+        E.C("Assign Group %d At %s", g, a)
+        E.C('Set %s Property "Name" "%s"', a, f[1])
+      end
+      -- steps 2 and 3 start at Full too (step 1 gets it from its Dim picker)
+      if st > 1 and full.at then E.C('Assign Preset %s At Preset 21.%d."Dimmer"*', full.at, no) end
     end
+    SetVar(GlobalVars(), V("e", gi), tostring(pre(gi, 1)))
+  end
+  -- the Master line (a group of your choice at Full, picked with Master: empty at first)
+  local function masterLine() return full.at and {nil, full.at, nil, name = "Master"} or nil end
+
+  -- the Go+ steps: step k plays its preset, sets which step comes next, and after Hold releases
+  -- itself (cue 2 switches it off, over Out)
+  for gi, g in ipairs(groups) do
+    for st = 1, NSTEP do
+      local ss = stepSeq(gi, st)
+      keySeq(E, ss, P .. names[gi] .. " Step " .. st, {{g, "21." .. pre(gi, st), bmx(gi)}, masterLine()}, AP.key)
+      cueCmd(E, ss, 1, string.format('SetGlobalVariable "%s" $%s', V("next", gi), V("after" .. st .. "_", gi)))
+      E.C("Store Sequence %d Cue 2 /Overwrite", ss)
+      E.Cany({ string.format('Set Sequence %d Cue 2 Property "TrigType" "Follow"', ss),
+               string.format('Set Sequence %d Cue 2 Property "Trig" "Follow"', ss) })
+      E.Cany({ string.format('Set Sequence %d Cue 2 Part 0 Property "CueInDelay" 0.5', ss) })
+      cueCmd(E, ss, 2, "Off Sequence " .. ss)
+    end
+    -- 1 step at first: step 1 is followed by step 1
+    SetVar(GlobalVars(), V("next", gi), tostring(stepSeq(gi, 1)))
+    for st = 1, NSTEP do SetVar(GlobalVars(), V("after" .. st .. "_", gi), tostring(stepSeq(gi, 1))) end
   end
 
   -- the keys (Temp)
-  local KEY_AP = {bump = AP.key, strobe = AP.strobe, rnd = AP.strobe, xk = AP.xk}
+  local KEY_AP = {bump = AP.key, steps = AP.key, strobe = AP.strobe, rnd = AP.strobe, xk = AP.xk}
   local function keyLines(gi, kind)
     if kind == "bump" then return {{groups[gi], "21." .. pre(gi), bmx(gi)}} end
+    if kind == "steps" then return {} end
     if kind == "xk" then
       return forms[1] and {{groups[gi], (forms.default or forms[1]).at, xmx(gi)}} or {}
     end
@@ -10656,11 +10708,28 @@ local function buildBumps(E, groups, o)
   for b = 0, nG do
     if b > 0 then place(E, L, "Group " .. groups[b], 0, b, names[b]) end
     for j, k in ipairs(KEYS) do
+     if k[2] == "steps" then
+      -- Steps (Go+): an empty cue that switches the row's steps off and plays the next one; then
+      -- it switches itself off, so the next press starts it again
+      local sq = seqNo(b, j)
+      keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], {}, AP.key)
+      local l = {}
+      if b == 0 then
+        for gi = 1, nG do l[#l + 1] = "Go+ Sequence " .. seqNo(gi, j) end
+      else
+        l[1] = string.format("Off Sequence %d Thru %d", stepSeq(b, 1), stepSeq(b, NSTEP))
+        l[2] = string.format("Goto Sequence $%s Cue 1", V("next", b))
+      end
+      l[#l + 1] = "Off Sequence " .. sq
+      cueCmd(E, sq, 1, table.concat(l, "; "))
+      place(E, L, "Sequence " .. sq, COL.keys + j - 1, b, b == 0 and (k[1] .. " All") or k[1], "Go+")
+     else
       local lines = {}
       if b == 0 then
         for gi = 1, nG do for _, l in ipairs(keyLines(gi, k[2])) do lines[#lines + 1] = l end end
       else
         lines = keyLines(b, k[2])
+        if k[2] == "bump" then lines[#lines + 1] = masterLine() end
       end
       local sq = seqNo(b, j)
       if #lines == 0 then
@@ -10671,6 +10740,7 @@ local function buildBumps(E, groups, o)
         if k[2] == "xk" and o.speed > 0 then E.trySeqMaster(sq, "SpeedMaster", "Speed", o.speed) end
         place(E, L, "Sequence " .. sq, COL.keys + j - 1, b, b == 0 and (k[1] .. " All") or k[1], "Temp")
       end
+     end
     end
   end
 
@@ -10717,7 +10787,7 @@ local function buildBumps(E, groups, o)
     for gi, g in ipairs(groups) do
       local list = looks(g, f[1])
       if #list > 0 then  -- (no such wheel on that group's fixtures: no button)
-        local line = string.format('Preset 21.%d."%s"*', pre(gi), f[1])
+        local line = string.format('Preset 21.$%s."%s"*', V("e", gi), f[1])
         local sq, items = listBtn(gi, j, col, f[2], f[2], function(idx)
           local it = {{name = "Off", ap = AP.off, cmd = join(string.format('Set %s Property "Values" ""', line), textCmd(idx, f[2]))}}
           for _, c in ipairs(list) do
@@ -10806,8 +10876,8 @@ local function buildBumps(E, groups, o)
         for _, f in ipairs(forms) do
           local cmd
           if b == 0 then cmd = gotoRows(J_FORM, f.name)
-          elseif E.obj("Sequence " .. seqNo(b, 1 + 3)) then
-            cmd = string.format("Assign Preset %s At Sequence %d Cue 1 Part 0.1", f.at, seqNo(b, 4))
+          elseif E.obj("Sequence " .. seqNo(b, J_XK)) then
+            cmd = string.format("Assign Preset %s At Sequence %d Cue 1 Part 0.1", f.at, seqNo(b, J_XK))
           end
           it[#it + 1] = {name = f.name, ap = AP.xk, cmd = join(cmd, textCmd(idx, f.name))}
         end
@@ -10823,7 +10893,15 @@ local function buildBumps(E, groups, o)
   end
 
   -- Out: the bump's release fade (its OffCue); Bump All takes the one set last
-  local bumpAll = E.obj("Sequence " .. seqNo(0, 1)) and seqNo(0, 1)
+  local bumpAll = E.obj("Sequence " .. seqNo(0, J_BUMP)) and seqNo(0, J_BUMP)
+  -- the sequences a row's Fade / Out apply to: its Bump key, its steps (and Bump All, which takes
+  -- the one set last)
+  local function bumpSeqs(r)
+    local t = {seqNo(r, J_BUMP)}
+    for st = 1, NSTEP do t[#t + 1] = stepSeq(r, st) end
+    t[#t + 1] = bumpAll
+    return t
+  end
   for b = 0, nG do
     local sq = seqNo(b, J_OUT)
     local steps = {}
@@ -10835,7 +10913,7 @@ local function buildBumps(E, groups, o)
       if b == 0 then
         for gi = 1, nG do l[#l + 1] = string.format("Goto Sequence %d Cue %d", seqNo(gi, J_OUT), k) end
       else
-        for _, s in ipairs({seqNo(b, 1), bumpAll}) do
+        for _, s in ipairs(bumpSeqs(b)) do
           if s and E.obj("Sequence " .. s) then
             l[#l + 1] = string.format('Set Sequence %d Cue "OffCue" Part 0 Property "CueInFade" %s', s, tostring(v))
           end
@@ -10847,13 +10925,89 @@ local function buildBumps(E, groups, o)
     if b > 0 then starts[#starts + 1] = {sq, 1} end
   end
 
+  -- the Go+ step settings: Edit Step (which step the look pickers change), Step Count (how many
+  -- steps the Steps key goes through), Hold (how long a step stays on), Master (a group of your
+  -- choice at Full with the bump and every step, e.g. the main fixtures of pixel cells)
+  local showGroups = {}
+  for n = 1, 999 do
+    local h = E.obj("Group " .. n)
+    if h then showGroups[#showGroups + 1] = {no = n, name = tostring(E.objName(h) or ("Group " .. n))} end
+    if #showGroups >= 60 then break end
+  end
+  for _, b in ipairs(ROWS_THEN_ALL) do
+    local function rowOrAll(j, name, cmd) return b == 0 and gotoRows(j, name) or cmd end
+    local sq, items = listBtn(b, J_EDIT, COL.edit, "Edit Step 1", "Edit Step", function(idx)
+      local it = {}
+      for st = 1, NSTEP do
+        local name = "Step " .. st
+        it[st] = {name = name, ap = AP.on, cmd = join(rowOrAll(J_EDIT, name,
+          b > 0 and string.format('SetGlobalVariable "%s" "%d"', V("e", b), pre(b, st))), textCmd(idx, "Edit " .. name))}
+      end
+      return it
+    end)
+    if b > 0 then remember(J_EDIT, b, items) starts[#starts + 1] = {sq, 1} end
+    sq, items = listBtn(b, J_CNT, COL.cnt, "1 Step", "Step Count", function(idx)
+      local it = {}
+      for n = 1, NSTEP do
+        local name = n == 1 and "1 Step" or (n .. " Steps")
+        local cmd
+        if b > 0 then
+          local l = {string.format('SetGlobalVariable "%s" "%d"', V("next", b), stepSeq(b, 1))}
+          for st = 1, NSTEP do
+            l[#l + 1] = string.format('SetGlobalVariable "%s" "%d"', V("after" .. st .. "_", b), stepSeq(b, st < n and st + 1 or 1))
+          end
+          cmd = table.concat(l, "; ")
+        end
+        it[n] = {name = name, ap = AP.on, cmd = join(rowOrAll(J_CNT, name, cmd), textCmd(idx, name))}
+      end
+      return it
+    end)
+    if b > 0 then remember(J_CNT, b, items) starts[#starts + 1] = {sq, 1} end
+    -- Hold: cue 2 of each step waits this long
+    sq = seqNo(b, J_HOLD)
+    local steps = {}
+    for k, v in ipairs(HOLDS) do steps[k] = {"Hold " .. v .. "s", AP.lit} end
+    cycleSeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " Hold", steps)
+    local hidx = place(E, L, "Sequence " .. sq, COL.hold, b, "Hold 0.5s")
+    for k, v in ipairs(HOLDS) do
+      local l = {}
+      if b == 0 then
+        for gi = 1, nG do l[#l + 1] = string.format("Goto Sequence %d Cue %d", seqNo(gi, J_HOLD), k) end
+      else
+        for st = 1, NSTEP do l[#l + 1] = string.format('Set Sequence %d Cue 2 Part 0 Property "CueInDelay" %s', stepSeq(b, st), tostring(v)) end
+      end
+      l[#l + 1] = textCmd(hidx, "Hold " .. v .. "s")
+      cueCmd(E, sq, k, join(table.unpack(l)))
+    end
+    if b > 0 then starts[#starts + 1] = {sq, 2} end
+    -- Master (group rows only)
+    if b > 0 and full.at then
+      local seqs = {seqNo(b, J_BUMP)}
+      for st = 1, NSTEP do seqs[#seqs + 1] = stepSeq(b, st) end
+      sq, items = listBtn(b, J_MST, COL.mst, "Master", "Master", function(idx)
+        local off = {}
+        for _, x in ipairs(seqs) do off[#off + 1] = string.format('Set Sequence %d Cue 1 Part 0."Master" Property "Selection" ""', x) end
+        local it = {{name = "Off", ap = AP.off, cmd = join(table.concat(off, "; "), textCmd(idx, "Master"))}}
+        for _, sg in ipairs(showGroups) do
+          local l = {}
+          for _, x in ipairs(seqs) do l[#l + 1] = string.format('Assign Group %d At Sequence %d Cue 1 Part 0."Master"', sg.no, x) end
+          it[#it + 1] = {name = sg.name, ap = AP.on, cmd = join(table.concat(l, "; "), textCmd(idx, "Master " .. sg.name))}
+        end
+        return it
+      end)
+      starts[#starts + 1] = {sq, 1}
+    elseif E.obj("Sequence " .. seqNo(b, J_MST)) then
+      E.C("Delete Sequence %d /NC", seqNo(b, J_MST))
+    end
+  end
+
   -- Fade / Delay / Wings (lib picker): Fade = the bump's cue fade, Delay / Wings on its MAtricks
   local seq = seq0 + (nG + 1) * NPR
   seq = mxButtons(E, {L = L, n = nG, names = names, mx0 = mx0, seq0 = seq, col = COL.mx,
                       row = function(r) return r end, P = P, AP = AP, list = MXL, vals = MXV,
                       cueFade = function(r)
                         local t = {}
-                        for _, s in ipairs({seqNo(r, 1), bumpAll}) do if s and E.obj("Sequence " .. s) then t[#t + 1] = tostring(s) end end
+                        for _, s in ipairs(bumpSeqs(r)) do if s and E.obj("Sequence " .. s) then t[#t + 1] = tostring(s) end end
                         return t
                       end})
 
@@ -10861,7 +11015,7 @@ local function buildBumps(E, groups, o)
   -- set it), then the lists go off (they show their text; the values stay)
   for _, s in ipairs(starts) do E.C("Goto Sequence %d Cue %d", s[1], s[2]) end
   for b = 0, nG do
-    for _, j in ipairs({J_PART, J_PAT, J_FORM}) do
+    for _, j in ipairs({J_PART, J_PAT, J_FORM, J_EDIT, J_CNT, J_MST}) do
       if E.obj("Sequence " .. seqNo(b, j)) then E.C("Off Sequence %d", seqNo(b, j)) end
     end
     for fi = 1, #FAMS do if E.obj("Sequence " .. seqNo(b, #KEYS + fi)) then E.C("Off Sequence %d", seqNo(b, #KEYS + fi)) end end
@@ -10870,8 +11024,9 @@ local function buildBumps(E, groups, o)
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("ap", ap0)
   svar("mtx", mx0) svar("preset", pre0) svar("speed", o.speed)
   local lines = {string.format("Layout %d: ALL + %d group rows (Sequences %d-%d, Appearances %d-%d, MAtricks %d-%d, bump Presets 21.%d-%d).",
-    L, nG, seq0, seq - 1, ap0, ap0 + AP_N + nC - 1, mx0, mx0 + 2 * nG - 1, pre0, pre0 + nG - 1),
-    "Bump / Strobe / Rnd / X-Key are Temp keys (on while held): put the sequences on executors or X-keys as you like.",
+    L, nG, seq0, seq - 1, ap0, ap0 + AP_N + nC - 1, mx0, mx0 + 2 * nG - 1, pre0, pre(nG, NSTEP)),
+    "Bump / Strobe / Rnd / X-Key are Temp keys (on while held), Steps is Go+ (each press plays the next step):",
+    "put the sequences on executors or X-keys as you like.",
     "Tap a picker to choose from its list; the bump plays the new look straight away."}
   if o.speed > 0 then lines[#lines + 1] = string.format("The X-Key chases follow Speed master %d.", o.speed) end
   if skipped > 0 then lines[#lines + 1] = string.format("%d pickers left out: those groups' fixtures have no such wheel.", skipped) end

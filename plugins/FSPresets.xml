@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <GMA3 DataVersion="2.0.0.0">
-	<Plugin Name="FS Presets" Version="1.0.0" Author="FireSystem">
+	<Plugin Name="FS Presets" Version="1.1.0" Author="FireSystem">
 		<ComponentLua Name="FSPresets" FileName="FSPresets.lua" />
 	</Plugin>
 </GMA3>
