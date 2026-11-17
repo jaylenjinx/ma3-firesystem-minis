@@ -5,9 +5,8 @@
   the groups (up to 8), how many LOS banks (1-4) and the pool numbers, then builds a layout with one
   block per bank:
 
-    [group 1..8 toggles]   [Dim Off 0 Full]          [Fade 0 / input]  [Wings 0 / 2]
-    [Gobo Off Open 1 2]    [Prism Off Open 1 2]      [Iris Off Close Open]
-    [Shutter Off Strb Rnd] [Zoom Off Small Big]      [Pos Off Up Down] [Delay 0 / input] [Off 0 / input]
+    [group 1..8 toggles]                                    [Fade 0 / input]  [Wings 0 / 2]
+    [Dim] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]      [Delay 0 / input] [Off 0 / input]
     [Color Off + 15 colours]
     [BUMPS: All >  All <  Odd  Even  1/3  2/3  3/3  Chase]   (sequences: put them on X-keys / executors)
 
@@ -45,28 +44,25 @@ local MXK = {"A", "B", "O", "E", "T1", "T2", "T3"}   -- MAtricks per bank
 local MXN = {A = "All >", B = "All <", O = "Odd", E = "Even", T1 = "1 of 3", T2 = "2 of 3", T3 = "3 of 3"}
 local MXSET = {O = {{"XGroup", "2"}, {"X", "1"}}, E = {{"XGroup", "2"}, {"X", "2"}},
                T1 = {{"XGroup", "3"}, {"X", "1"}}, T2 = {{"XGroup", "3"}, {"X", "2"}}, T3 = {{"XGroup", "3"}, {"X", "3"}}}
--- the look families: {line name, button prefix, layout row, first col, options}; an option is
--- {text, kind, what}: kind "pool" = the preset "pool:label" for every group, "type" = the group's
--- own fixture-type preset (wheel, slot index), "col" = the colour presets
+-- the look families: {line name, button text, kind, wheel}. "list" = the same presets for every
+-- group (FS Presets' Dimmer 0-100 %, Iris, Zoom, Position pools), "typed" = each group's own
+-- fixture-type presets of that wheel (by slot name), "colours" = the colour buttons. Every family
+-- but Color is one Goto list button (Lyn 2026-11-17: room for every option)
 local FAMS = {
-  {"Dimmer",   "Dim",     0, 9.25,  {{"0", "pool", "1:0%"}, {"Full", "pool", "1:100%"}}},
-  {"Gobo",     "Gobo",    1, 0,     {{"Open", "type", "gobo1", 1}, {"1", "type", "gobo1", 2}, {"2", "type", "gobo1", 3}}},
-  {"Prism",    "Prism",   1, 4.25,  {{"Open", "type", "prism", 1}, {"1", "type", "prism", 2}, {"2", "type", "prism", 3}}},
-  {"Iris",     "Iris",    1, 8.5,   {{"Close", "pool", "5:Iris 80%"}, {"Open", "pool", "5:Iris 0%"}}},
-  {"Shutter",  "Shutter", 2, 0,     {{"Strobe", "type", "shutter", "Strobe"}, {"Rnd", "type", "shutter", "Random"}}},
-  {"Zoom",     "Zoom",    2, 3.25,  {{"Small", "pool", "6:Zoom Narrow"}, {"Big", "pool", "6:Zoom Wide"}}},
-  {"Position", "Pos",     2, 6.5,   {{"Up", "pool", "2:Tilt 45"}, {"Down", "pool", "2:Tilt Down"}}},
-  {"Color",    "",        3, 0,     "colours"},
+  {"Dimmer",   "Dim",     "list"},
+  {"Gobo",     "Gobo",    "typed", "gobo1"},
+  {"Prism",    "Prism",   "typed", "prism"},
+  {"Iris",     "Iris",    "list"},
+  {"Shutter",  "Shutter", "typed", "shutter"},
+  {"Zoom",     "Zoom",    "list"},
+  {"Position", "Pos",     "list"},
+  {"Color",    "",        "colours"},
 }
-local TIMING_COL = 12.75
-local BLOCK_ROWS = 5.5
+local NPICK = #FAMS - 1   -- the Goto lists (all but Color)
+local TIMING_COL = 9.25
+local BLOCK_ROWS = 4.5
 
-local function nLooks(nC)
-  local n = 0
-  for _, f in ipairs(FAMS) do n = n + 1 + (f[5] == "colours" and nC or #f[5]) end
-  return n
-end
-local function perBank(nG, nC) return {seq = #BUMPS, mtx = #MXK, macro = nG + nLooks(nC) + 8} end
+local function perBank(nG, nC) return {seq = #BUMPS + NPICK, mtx = #MXK, macro = nG + 1 + nC + 8} end
 
 local function minePreset(E, no)
   local h = E.obj("Preset 21." .. no)
@@ -111,37 +107,52 @@ local function ask(E, nC)
     pre = n("First LOS preset (All pool 21)")}
 end
 
--- the presets each option points at: FS Presets' plan (made here when missing)
+-- the presets the look lists point at: FS Presets' plan (made here when missing). Returns
+-- lists[family] = {{name, at}, ...} (the same presets for every group), slots(wheel) = the slot
+-- names any group has on that wheel, slotAt(group, wheel, slot) = that group's preset, and the colours
 local function losPresets(E, groups)
   local made, foreign, _, recs = buildPresets(E, groups, {dim = true, pos = true, col = true, zoom = true, gobo = true, beam = true}, false)
   local bad = {}
   for _, f in ipairs(foreign) do bad[f:match("^(Preset %d+%.%d+)")] = true end
-  local at, typed = {}, {}   -- "pool:label" -> "pool.no"; group .. ":" .. wheel -> {{slot, at}, ...}
+  local col4, typed = {}, {}   -- colour name -> "4.no"; group .. ":" .. wheel -> {slot -> at}
+  local lists = {Dimmer = {}, Iris = {}, Zoom = {}, Position = {}}
+  local order = {}             -- wheel -> slot names in plan order
   for _, r in ipairs(recs) do
     local a = r.pool .. "." .. r.no
     if not bad["Preset " .. a] then
-      at[r.pool .. ":" .. r.label] = a
+      local into
+      if r.pool == 4 then col4[r.label] = a
+      elseif r.fam == "dim" and r.pool == 1 and r.label:match("^%d+%%$") then into = "Dimmer"
+      elseif r.fam == "pos" and r.pool == 2 then into = "Position"
+      elseif r.fam == "zoom" and r.pool == 6 and not r.label:find("^Focus") then into = "Zoom"
+      elseif r.wheel == "iris" then into = "Iris" end
+      if into then table.insert(lists[into], {name = r.label, at = a}) end
       if r.groups and r.wheel then
+        order[r.wheel] = order[r.wheel] or {}
+        local seen = false
+        for _, x in ipairs(order[r.wheel]) do if x == r.slot then seen = true end end
+        if not seen then table.insert(order[r.wheel], r.slot) end
         for _, g in ipairs(r.groups) do
           local k = g .. ":" .. r.wheel
           typed[k] = typed[k] or {}
-          table.insert(typed[k], {slot = r.slot, at = a})
+          typed[k][r.slot] = typed[k][r.slot] or a
         end
       end
     end
   end
   local cols = {}
   for _, c in ipairs(E.CFG.COLORS) do
-    if at["4:" .. c[1]] then cols[#cols + 1] = {name = c[1], at = at["4:" .. c[1]], rgb = c[3]} end
+    if col4[c[1]] then cols[#cols + 1] = {name = c[1], at = col4[c[1]], rgb = c[3]} end
   end
-  -- option o of a family for group g: a preset address or nil
-  local function pick(o, g)
-    if o[2] == "pool" then return at[o[3]] end
-    local l = typed[tostring(g) .. ":" .. o[3]] or {}
-    if type(o[4]) == "number" then return l[o[4]] and l[o[4]].at end
-    for _, x in ipairs(l) do if x.slot == o[4] then return x.at end end
+  local function slotAt(g, wheel, slot) return (typed[tostring(g) .. ":" .. wheel] or {})[slot] end
+  local function slots(wheel)
+    local l = {}
+    for _, sl in ipairs(order[wheel] or {}) do
+      for _, g in ipairs(groups) do if slotAt(g, wheel, sl) then l[#l + 1] = sl break end end
+    end
+    return l
   end
-  return pick, cols, made, foreign
+  return lists, slots, slotAt, cols, made, foreign
 end
 
 local function setWait(E, M, line, wait)
@@ -153,7 +164,7 @@ local function buildLOS(E, groups, o)
   local L, seq0, M0, ap0, mx0, pre0, NB = o.L, o.seq0, o.M0, o.ap0, o.mx0, o.pre, o.nb
   E.failures = {}
   E.CFG.GROUPS = groups
-  local pick, cols, madeP, foreign = losPresets(E, groups)
+  local lists, slots, slotAt, cols, madeP, foreign = losPresets(E, groups)
   local nC, nG = #cols, #groups
   local names = {}
   for gi, g in ipairs(groups) do names[gi] = tostring(E.objName(E.obj("Group " .. g)) or ("Group " .. g)) end
@@ -270,52 +281,51 @@ local function buildLOS(E, groups, o)
                 string.format("Assign Appearance %d At Macro %d", AP.gOff, me.M), table.concat(off, "; ")}, {2}
       end)
     end
-    -- the looks
+    -- the looks: a Goto list per family (a tap opens Off + every option), placed on row 1
+    local picks = {}
     for _, f in ipairs(FAMS) do
-      local fam = {}
-      local opts = f[5] == "colours" and {} or f[5]
-      if f[5] == "colours" then for _, c in ipairs(cols) do opts[#opts + 1] = {c.name, "col", c} end end
-      local first = M
-      local n = #opts + 1
-      local function swap(me, ci)
-        -- every button of the family back to idle, this one lit
-        if f[5] == "colours" then
-          local l = {string.format("Assign Appearance %d At Macro %d", AP.idle, first)}
-          if nC > 0 then l[2] = string.format("Assign Appearance %d Thru %d At Macro %d Thru %d", apC(1, false), apC(nC, false), first + 1, first + nC) end
-          l[#l + 1] = string.format("Assign Appearance %d At Macro %d", ci and apC(ci, true) or AP.lit, me.M)
-          return table.concat(l, "; ")
-        end
-        return string.format("Assign Appearance %d At Macro %d Thru %d; Assign Appearance %d At Macro %d", AP.idle, first, first + n - 1, AP.lit, me.M)
-      end
-      local function txt(s) return (f[2] ~= "" and (f[2] .. " ") or "") .. s end
-      btn(B .. f[1] .. " Off", txt("Off"), f[4], f[3], AP.idle, function(me)
-        return {string.format('Set Preset 21.%d."%s"* Property "Values" ""', pre, f[1]), swap(me)}
-      end, true)
-      for oi, op in ipairs(opts) do
-        local isCol = op[2] == "col"
-        btn(B .. f[1] .. " " .. op[1], isCol and "" or txt(op[1]), f[4] + (isCol and 0.25 or 0) + oi, f[3],
-            isCol and apC(oi, false) or AP.idle, function(me)
-          local l = {}
-          if op[2] == "col" then
-            l[1] = string.format('Assign Preset %s At Preset 21.%d."%s"*', op[3].at, pre, f[1])
-          elseif op[2] == "pool" then
-            local a = pick(op, groups[1])
-            l[1] = a and string.format('Assign Preset %s At Preset 21.%d."%s"*', a, pre, f[1])
-                     or string.format('Set Preset 21.%d."%s"* Property "Values" ""', pre, f[1])
-          else
-            -- each group its own fixture type's preset; none = that group's line left empty
+      if f[3] ~= "colours" then
+        local sq = s0 + #BUMPS + #picks
+        picks[#picks + 1] = sq
+        local items = {{name = "Off", ap = AP.idle, cmd = string.format('Set Preset 21.%d."%s"* Property "Values" ""', pre, f[1])}}
+        if f[3] == "list" then
+          for _, x in ipairs(lists[f[1]]) do
+            items[#items + 1] = {name = x.name, ap = AP.lit, cmd = string.format('Assign Preset %s At Preset 21.%d."%s"*', x.at, pre, f[1])}
+          end
+        else
+          -- each group its own fixture type's preset of that slot; none = that group's line left empty
+          for _, sl in ipairs(slots(f[4])) do
             local parts = {}
             for gi, g in ipairs(groups) do
-              local a = pick(op, g)
+              local a = slotAt(g, f[4], sl)
               parts[#parts + 1] = a and string.format('Assign Preset %s At Preset 21.%d."%s G%d"', a, pre, f[1], gi)
                                     or string.format('Set Preset 21.%d."%s G%d" Property "Values" ""', pre, f[1], gi)
             end
-            l[1] = table.concat(parts, "; ")
+            items[#items + 1] = {name = sl, ap = AP.lit, cmd = table.concat(parts, "; ")}
           end
-          l[2] = swap(me, isCol and oi or nil)
-          return l
-        end)
+        end
+        if E.obj("Sequence " .. sq) then E.C("Delete Sequence %d /NC", sq) end
+        E.C("Store Sequence %d Cue 1 /Overwrite", sq)
+        place(E, L, "Sequence " .. sq, #picks - 1, R + 1, f[2], "Goto")
+        listSeq(E, sq, P .. B .. f[2], items, AP.idle)
       end
+    end
+    -- the colours: a macro each (Off + every colour) on row 2
+    local first = M
+    local function swap(me, ci)
+      -- every colour button back to dim, this one lit
+      local l = {string.format("Assign Appearance %d At Macro %d", AP.idle, first)}
+      if nC > 0 then l[2] = string.format("Assign Appearance %d Thru %d At Macro %d Thru %d", apC(1, false), apC(nC, false), first + 1, first + nC) end
+      l[#l + 1] = string.format("Assign Appearance %d At Macro %d", ci and apC(ci, true) or AP.lit, me.M)
+      return table.concat(l, "; ")
+    end
+    btn(B .. "Color Off", "Off", 0, 2, AP.idle, function(me)
+      return {string.format('Set Preset 21.%d."Color"* Property "Values" ""', pre), swap(me)}
+    end, true)
+    for ci, c in ipairs(cols) do
+      btn(B .. "Color " .. c.name, "", 0.25 + ci, 2, apC(ci, false), function(me)
+        return {string.format('Assign Preset %s At Preset 21.%d."Color"*', c.at, pre), swap(me, ci)}
+      end)
     end
     -- timing: Fade / Wings on every MAtricks of the bank, Delay spread forwards (All >) and
     -- backwards (All <), Off = the bumps' release time
@@ -365,13 +375,14 @@ local function buildLOS(E, groups, o)
       for _, w in ipairs(waits or {}) do setWait(E, bt.M, w, "Go") end
     end
     -- the bump buttons (Temp: on while held, off with the Off time on release)
-    for bi, bu in ipairs(BUMPS) do place(E, L, "Sequence " .. (s0 + bi - 1), bi - 1, R + 4, B .. bu[1], "Temp") end
+    for bi, bu in ipairs(BUMPS) do place(E, L, "Sequence " .. (s0 + bi - 1), bi - 1, R + 3, B .. bu[1], "Temp") end
     -- start: every family Off, timing 0 (groups start left out)
+    for _, sq in ipairs(picks) do E.C("Goto Sequence %d Cue 1", sq) end
     for _, bt in ipairs(btns) do
       if bt.start then E.C("Go+ Macro %d", bt.M) end
     end
-    lines[#lines + 1] = string.format("LOS %d: bumps Sequences %d-%d, Macros %d-%d, MAtricks %d-%d, Preset 21.%d.",
-      b, s0, s0 + #BUMPS - 1, m0, M - 1, x0, x0 + #MXK - 1, pre)
+    lines[#lines + 1] = string.format("LOS %d: bumps Sequences %d-%d, look lists %d-%d, Macros %d-%d, MAtricks %d-%d, Preset 21.%d.",
+      b, s0, s0 + #BUMPS - 1, s0 + #BUMPS, s0 + #BUMPS + NPICK - 1, m0, M - 1, x0, x0 + #MXK - 1, pre)
   end
   E.C("ClearAll")
   svar("groups", E.rangeList({table.unpack(groups)})) svar("banks", NB) svar("layout", L) svar("seq", seq0)
