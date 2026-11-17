@@ -1,6 +1,6 @@
 # FireSystem Minis: single-purpose grandMA3 tools
 
-**Latest version: none yet**
+**Latest version: v1.0.0**
 
 **Site:** https://jaylenjinx.github.io/ma3-firesystem-minis/
 
