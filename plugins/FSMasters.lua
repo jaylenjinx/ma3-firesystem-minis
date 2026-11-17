@@ -9,7 +9,12 @@
 
     401-408  Rnd strobe keys     (FS Bumps "Rnd", Flash)
     301-308  Strobe keys         (FS Bumps "Strobe", Flash)
-    201-208  Group masters       (the group itself on the fader, at 100 % when newly assigned)
+    201-208  Group faders        (at 100 % when newly assigned): by default playback master 11-18,
+                                  linked to that group's FS Dimmer FX buttons, so the fader dims
+                                  the group's dimmer look while FS Bumps and FS LOS ignore it (MA
+                                  has no setting that makes a playback skip a group master: those
+                                  limit the fixtures' output whatever plays them). Untick "Faders
+                                  skip bumps and LOS" for plain group masters (the group itself)
     101-108  Bump keys           (FS Bumps "Bump", Temp)
     191-198  X-keys              (FS LOS bank 1's 8 bumps, Temp; bank 2 on the next page's
                                   X-keys, and so on)
@@ -10175,6 +10180,8 @@ local LOS = {"All >", "All <", "Odd", "Even", "1/3", "2/3", "3/3", "Chase"}
 local LOS_BASE, LOS_BANKS = 190, 4
 local STROBE_ALL = {"ALL Strobe", 110, "Temp"}
 local GROUP_BASE = 200
+local PB_BASE = 10   -- group faders as playback masters: group gi = Playback master PB_BASE + gi
+local SKIP = "Faders skip bumps and LOS"
 -- {executor, kind, number, page offset}: as FireSystem's CFG.MASTER_EXECS
 local MASTERS = {
   {210, "Speed", 1, 0}, {209, "Speed", 2, 0}, {409, "Speed", 3, 0}, {410, "Speed", 4, 0}, {211, "Speed", 5, 0},
@@ -10206,7 +10213,7 @@ local function holds(pg, ex)
   return r
 end
 
-local function buildMasters(E, groups, pg)
+local function buildMasters(E, groups, pg, skip)
   E.failures = {}
   local names = {}
   for gi, g in ipairs(groups) do names[gi] = tostring(E.objName(E.obj("Group " .. g)) or ("G" .. gi)) end
@@ -10220,7 +10227,8 @@ local function buildMasters(E, groups, pg)
     local o = holds(p, ex)
     if not o then return true end
     if o[1] == wantClass and o[2] == wantNo then return true end
-    if o[3]:sub(1, #E.CFG.PREFIX + 1) == E.CFG.PREFIX .. " " or (o[1] == "Group" and isGroup[o[2]]) then
+    if o[3]:sub(1, #E.CFG.PREFIX + 1) == E.CFG.PREFIX .. " " or (o[1] == "Group" and isGroup[o[2]])
+       or (o[1]:find("Master") and ex > GROUP_BASE and ex <= GROUP_BASE + 8) then
       E.C("Delete Page %d.%d /NC", p, ex)
       return true
     end
@@ -10250,12 +10258,60 @@ local function buildMasters(E, groups, pg)
     put(no, pg, ex, k)
   end
 
+  -- a group's FS Dimmer FX buttons ("FS DF <group name> <button>")
+  local function dimSeqs(gi)
+    local l = {}
+    local ok, list = pcall(ObjectList, string.format('Sequence "%s DF %s "*', E.CFG.PREFIX, names[gi]))
+    for _, h in ipairs(ok and type(list) == "table" and list or {}) do
+      local no
+      pcall(function() no = tonumber(h.no) end)
+      if not no then pcall(function() no = tonumber(h.No) end) end
+      if no then l[#l + 1] = no end
+    end
+    return l
+  end
+  -- link a sequence to Playback master n (MA reads back "Playback<n>" or the master's name)
+  local function linkPB(seq, n, label)
+    local function linked()
+      local v
+      pcall(function() v = tostring(DataPool().Sequences[seq]:Get("PlaybackMaster", Enums.Roles.Display)) end)
+      return v == nil or v == "nil" or v == "Playback" .. n or v == label
+    end
+    for _, val in ipairs({"Playback" .. n, label}) do
+      E.C('Set Sequence %d Property "PlaybackMaster" %s', seq, E.q(val))
+      if linked() then return end
+    end
+    E.failures[#E.failures + 1] = string.format("Sequence %d: could not link Playback master %d", seq, n)
+  end
+  local noDim = {}
+
   for gi, g in ipairs(groups) do
     for _, r in ipairs(ROWS) do key(names[gi] .. " " .. r[1], r[2] + gi, r[3]) end
-    -- group master: the group itself; the fader goes to 100 % only when newly assigned
     local ex = GROUP_BASE + gi
     local was = holds(pg, ex)
-    if free(pg, ex, "Group", g) then
+    if skip then
+      -- a playback master on the group's Dimmer FX buttons; the fader goes to 100 % only when newly assigned
+      local n, label = PB_BASE + gi, names[gi] .. " Dim"
+      local seqs = dimSeqs(gi)
+      if #seqs == 0 then noDim[#noDim + 1] = names[gi] end
+      for _, s in ipairs(seqs) do linkPB(s, n, label) end
+      if free(pg, ex, "Master", n) then
+        if not (was and was[1]:find("Master") and was[2] == n) then
+          E.Cany({ string.format('Assign Master "Playback".%d At Page %d.%d', n, pg, ex),
+                   string.format("Assign Master Playback.%d At Page %d.%d", n, pg, ex),
+                   string.format("Assign PlaybackMaster %d At Page %d.%d", n, pg, ex) })
+          E.Cany({ string.format("Fader Page %d.%d At 100", pg, ex), string.format("Page %d.%d At 100", pg, ex) })
+        end
+        placed = placed + 1
+      end
+      local okName = pcall(function() ShowData().Masters.Playback[n].name = label end)
+      pcall(function() okName = ShowData().Masters.Playback[n].name == label end)
+      if not okName then
+        E.Cany({ string.format('Label Master "Playback".%d %s', n, E.q(label)),
+                 string.format("Label Master Playback.%d %s", n, E.q(label)) })
+      end
+    elseif free(pg, ex, "Group", g) then
+      -- group master: the group itself; the fader goes to 100 % only when newly assigned
       if not (was and was[1] == "Group" and was[2] == g) then
         E.C("Assign Group %d At Page %d.%d", g, pg, ex)
         E.Cany({ string.format("Fader Page %d.%d At 100", pg, ex), string.format("Page %d.%d At 100", pg, ex) })
@@ -10303,6 +10359,13 @@ local function buildMasters(E, groups, pg)
 
   svar("groups", E.rangeList({table.unpack(groups)})) svar("page", pg)
   local lines = {string.format("Page %d: %d executors for %d groups (playback masters on page %d).", pg, placed, #groups, pg + 1)}
+  if skip then
+    lines[#lines + 1] = string.format("Faders %d-%d: Playback masters %d-%d on each group's FS Dimmer FX buttons (bumps and LOS ignore them).",
+      GROUP_BASE + 1, GROUP_BASE + #groups, PB_BASE + 1, PB_BASE + #groups)
+    if #noDim > 0 then
+      lines[#lines + 1] = "No FS Dimmer FX buttons yet for: " .. table.concat(noDim, ", ") .. ". Run FS Dimmer FX, then run " .. TITLE .. " again."
+    end
+  end
   if banks > 0 then
     lines[#lines + 1] = string.format("X-keys: FS LOS bank%s 1%s on page%s %d%s.", banks > 1 and "s" or "",
       banks > 1 and ("-" .. banks) or "", banks > 1 and "s" or "", pg, banks > 1 and ("-" .. (pg + banks - 1)) or "")
@@ -10331,8 +10394,11 @@ local function main(displayHandle, argument)
     title = TITLE,
     message = "Groups for columns 1-8 (up to 8), e.g. 1 Thru 8, and the executor page to fill (FireSystem uses page 1;\n" ..
               "the playback masters go on the page after it). The keys are FS Bumps' sequences and the X-keys FS LOS's bumps:\n" ..
-              "run those first.",
+              "run those first.\n" ..
+              SKIP .. ": faders 201-208 dim each group's FS Dimmer FX buttons (run FS Dimmer FX first) and the\n" ..
+              "bumps and LOS play through at full. Off: plain group masters, which limit everything in the group.",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
+    states = {{name = SKIP, state = gvar("skip") ~= "0"}},
     inputs = {
       {name = "Groups", value = defaultGroups(E, VARP .. "groups"), whiteFilter = "0123456789 ,+-ThruTHRU"},
       {name = "Page", value = tostring(gvar("page") or "1"), whiteFilter = "0123456789"},
@@ -10346,7 +10412,9 @@ local function main(displayHandle, argument)
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
   if #good > 8 then return say("Pick up to 8 groups.") end
   if not pg or pg < 1 then return say("Fill in the page number.") end
-  local ok, lines = pcall(buildMasters, E, good, pg)
+  local skip = not (r.states and r.states[SKIP] == false)
+  svar("skip", skip and "1" or "0")
+  local ok, lines = pcall(buildMasters, E, good, pg, skip)
   if not ok then return say("Stopped: " .. tostring(lines)) end
   if #good < #groups then lines[#lines + 1] = "Skipped groups that don't exist." end
   if #E.failures > 0 then
