@@ -2,8 +2,17 @@
 local ma = require("ma_stub")
 
 -- FS Bumps' keys already in the show for both groups (and its ALL strobe), and 2 FS LOS banks
-local function build(withKeys)
+-- groupFaders = false: the plain group masters (the dialog's tick box off)
+local function build(withKeys, groupFaders)
   local stub, main = ma.load("FSMasters")
+  if groupFaders == false then
+    stub.answer = function(t)
+      local r = {result = 1, inputs = {}, states = {}}
+      for _, i in ipairs(t.inputs or {}) do r.inputs[i.name] = i.value end
+      for _, st in ipairs(t.states or {}) do r.states[st.name] = false end
+      return r
+    end
+  end
   if withKeys ~= false then
     local n = 500
     for _, g in ipairs({"Front", "Back"}) do
@@ -13,6 +22,10 @@ local function build(withKeys)
       end
     end
     stub.objects["Sequence 520"] = "FS BS ALL Strobe"
+    -- FS Dimmer FX's buttons for both groups
+    stub.objects["Sequence 701"] = "FS DF Front 0%"
+    stub.objects["Sequence 702"] = "FS DF Front Sine 1"
+    stub.objects["Sequence 703"] = "FS DF Back 100%"
     -- FS LOS: 2 banks of 8 bumps
     local los = {"All >", "All <", "Odd", "Even", "1/3", "2/3", "3/3", "Chase"}
     for b = 1, 2 do
@@ -49,8 +62,21 @@ test("FS Masters: the X-keys 191-198 play FS LOS bank 1's 8 bumps (Temp), bank 2
   t.ok(has(stub, 'Set Page 1.191 Property "Key" "Temp"'), "LOS key isn't Temp")
 end)
 
-test("FS Masters: group masters on 201-208, speed masters and playback masters as in FireSystem", function()
+test("FS Masters: by default 201-208 are per-group playback masters on FS Dimmer FX, so bumps and LOS ignore them", function()
   local stub = build()
+  t.ok(has(stub, 'Assign Master "Playback".11 At Page 1.201'), "no playback master 11 on 201")
+  t.ok(has(stub, 'Assign Master "Playback".12 At Page 1.202'), "no playback master 12 on 202")
+  t.ok(has(stub, 'Set Sequence 701 Property "PlaybackMaster" "Playback11"'), "Front 0% isn't on Playback 11")
+  t.ok(has(stub, 'Set Sequence 702 Property "PlaybackMaster" "Playback11"'), "Front Sine 1 isn't on Playback 11")
+  t.ok(has(stub, 'Set Sequence 703 Property "PlaybackMaster" "Playback12"'), "Back 100% isn't on Playback 12")
+  t.ok(not hasPat(stub, "^Assign Group %d At Page"), "still assigns a group master")
+  t.ok(not hasPat(stub, "^Set Sequence 50%d Property \"PlaybackMaster\""), "a bump got a playback master")
+  t.ok(not hasPat(stub, "^Set Sequence 6%d%d Property \"PlaybackMaster\""), "an LOS bump got a playback master")
+  t.ok(hasPat(stub, 'Label Master "Playback"%.11 "Front Dim"'), "Playback 11 isn't named")
+end)
+
+test("FS Masters: group masters on 201-208 when the tick box is off, speed masters and playback masters as in FireSystem", function()
+  local stub = build(true, false)
   t.ok(has(stub, "Assign Group 1 At Page 1.201"), "no group master 1")
   t.ok(has(stub, "Assign Group 2 At Page 1.202"), "no group master 2")
   t.ok(has(stub, 'Assign Master "Speed".1 At Page 1.210'), "Speed 1 not on 210")
@@ -61,7 +87,7 @@ test("FS Masters: group masters on 201-208, speed masters and playback masters a
 end)
 
 test("FS Masters: without FS Bumps it still places the masters and says to run FS Bumps", function()
-  local stub = build(false)
+  local stub = build(false, false)
   t.ok(has(stub, "Assign Group 1 At Page 1.201"), "no group master")
   t.ok(not hasPat(stub, "^Assign Sequence"), "assigned a sequence that isn't there")
   local said = table.concat(stub.messages, "\n")
