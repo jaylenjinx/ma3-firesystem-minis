@@ -10401,6 +10401,23 @@ local function mxButtons(E, o)
 end
 
 
+-- a Goto list: Sequence seq with an empty cue per item {name, ap, cmd} (the sequence is made fresh
+-- and placed by the caller: deleting it here would take it off the layout)
+local function listSeq(E, seq, label, items, apSeq)
+  for k, it in ipairs(items) do
+    E.C("ClearAll")
+    E.C("Store Sequence %d Cue %d /Overwrite", seq, k)
+    E.C("Label Sequence %d Cue %d %s", seq, k, E.q(it.name))
+    E.C("Assign Appearance %d At Sequence %d Cue %d", it.ap, seq, k)
+    E.Cany({ string.format("Assign Appearance %d At Sequence %d Cue %d Part 0", it.ap, seq, k) })
+    cueCmd(E, seq, k, it.cmd)
+  end
+  E.C("Label Sequence %d %s", seq, E.q(label))
+  setProp(E, "Sequence " .. seq, "PreferCueAppearance", "Yes")
+  E.C("Assign Appearance %d At Sequence %d", apSeq, seq)
+end
+
+
 local LEVELS = {"0%", "50%", "100%"}   -- FS Presets' Dimmer pool labels
 local AP_N = 6                         -- appearances: level off / on, FX off / on, MAtricks idle / lit
 local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Fade", "Delay")
