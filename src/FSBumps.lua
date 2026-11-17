@@ -16,8 +16,10 @@
     Left / Right / thirds, Delay, Wings) sit on the bump's line; Fade = the bump's fade in, Out = its
     release (OffCue) fade;
   - Steps (Go+): each press plays the row's next step (up to 3, Step Count), as FireSystem's Go+
-    bumps: a step is its own sequence (cue 1 = the step's preset, which also says which step comes
-    next; cue 2 follows after Hold and switches the step off over Out), so fast hits overlap. Edit
+    bumps: a step is its own sequence (cue 1 = the step's preset, switching the row's other steps
+    off; cue 2 follows after Hold and switches the step off over Out). The Steps key has an empty
+    cue per step that plays it (Go+ steps on and wraps round; Step Count rewrites those cues so the
+    ones past the count jump back), so no variables are involved. Edit
     Step picks which step's preset the look pickers change (step 1 = the Bump key's look). Master
     puts a group of your choice at Full with the bump and every step (e.g. the main fixtures of
     pixel cells), through a "Master" recipe line;
@@ -241,7 +243,7 @@ local function buildBumps(E, groups, o)
   local function seqNo(b, j) return seq0 + b * NPR + (j - 1) end   -- b = 0: ALL
   local function pre(gi, k) return pre0 + ((k or 1) - 1) * STRIDE + gi - 1 end
   local function stepSeq(gi, k) return seqNo(gi, J_STEP1 + k - 1) end
-  local function V(k, gi) return VARP .. k .. gi end   -- a row's variable: FSBS_e1, FSBS_next1, ...
+  local function V(k, gi) return VARP .. k .. gi end   -- a row's variable: FSBS_e1 (the edited step's preset)
   local function textCmd(idx, text)
     return idx and string.format('Set Layout %d.%d Property "CustomTextText" %s', L, idx, E.q(text)) or nil
   end
@@ -267,27 +269,32 @@ local function buildBumps(E, groups, o)
       -- steps 2 and 3 start at Full too (step 1 gets it from its Dim picker)
       if st > 1 and full.at then E.C('Assign Preset %s At Preset 21.%d."Dimmer"*', full.at, no) end
     end
-    SetVar(GlobalVars(), V("e", gi), tostring(pre(gi, 1)))
+    -- (through the command line, where the pickers' $FSBS_e<gi> reads it)
+    E.C('SetGlobalVariable "%s" "%d"', V("e", gi), pre(gi, 1))
   end
   -- the Master line (a group of your choice at Full, picked with Master: empty at first)
   local function masterLine() return full.at and {nil, full.at, nil, name = "Master"} or nil end
 
-  -- the Go+ steps: step k plays its preset, sets which step comes next, and after Hold releases
-  -- itself (cue 2 switches it off, over Out)
+  -- the Go+ steps: step k plays its preset, switches the row's other steps off, and after Hold
+  -- releases itself (cue 2 switches it off, over Out)
   for gi, g in ipairs(groups) do
     for st = 1, NSTEP do
       local ss = stepSeq(gi, st)
       keySeq(E, ss, P .. names[gi] .. " Step " .. st, {{g, "21." .. pre(gi, st), bmx(gi)}, masterLine()}, AP.key)
-      cueCmd(E, ss, 1, string.format('SetGlobalVariable "%s" $%s', V("next", gi), V("after" .. st .. "_", gi)))
+      local others = {}
+      for k = 1, NSTEP do if k ~= st then others[#others + 1] = "Off Sequence " .. stepSeq(gi, k) end end
+      cueCmd(E, ss, 1, table.concat(others, "; "))
       E.C("Store Sequence %d Cue 2 /Overwrite", ss)
       E.Cany({ string.format('Set Sequence %d Cue 2 Property "TrigType" "Follow"', ss),
                string.format('Set Sequence %d Cue 2 Property "Trig" "Follow"', ss) })
       E.Cany({ string.format('Set Sequence %d Cue 2 Part 0 Property "CueInDelay" 0.5', ss) })
       cueCmd(E, ss, 2, "Off Sequence " .. ss)
     end
-    -- 1 step at first: step 1 is followed by step 1
-    SetVar(GlobalVars(), V("next", gi), tostring(stepSeq(gi, 1)))
-    for st = 1, NSTEP do SetVar(GlobalVars(), V("after" .. st .. "_", gi), tostring(stepSeq(gi, 1))) end
+  end
+  -- the Steps key's cue k: plays step k, or (past the Step Count n) jumps back to cue ((k-1) mod n)+1
+  local function stepsCue(gi, k, n)
+    if k <= n then return string.format("Goto Sequence %d Cue 1", stepSeq(gi, k)) end
+    return string.format("Goto Sequence %d Cue %d", seqNo(gi, J_STEPS), (k - 1) % n + 1)
   end
 
   -- the keys (Temp)
@@ -302,19 +309,21 @@ local function buildBumps(E, groups, o)
     if b > 0 then place(E, L, "Group " .. groups[b], 0, b, names[b]) end
     for j, k in ipairs(KEYS) do
      if k[2] == "steps" then
-      -- Steps (Go+): an empty cue that switches the row's steps off and plays the next one; then
-      -- it switches itself off, so the next press starts it again
+      -- Steps (Go+): a row's key has an empty cue per step, each playing its step (Go+ steps on and
+      -- wraps round; Step Count rewrites the cues). Steps All: one cue doing Go+ on every row's key,
+      -- then switching itself off so the next press starts it again
       local sq = seqNo(b, j)
       keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], {}, AP.key)
-      local l = {}
       if b == 0 then
+        local l = {}
         for gi = 1, nG do l[#l + 1] = "Go+ Sequence " .. seqNo(gi, j) end
+        l[#l + 1] = "Off Sequence " .. sq
+        cueCmd(E, sq, 1, table.concat(l, "; "))
       else
-        l[1] = string.format("Off Sequence %d Thru %d", stepSeq(b, 1), stepSeq(b, NSTEP))
-        l[2] = string.format("Goto Sequence $%s Cue 1", V("next", b))
+        for c = 2, NSTEP do E.C("Store Sequence %d Cue %d /Overwrite", sq, c) end
+        for c = 1, NSTEP do cueCmd(E, sq, c, stepsCue(b, c, 1)) end
+        setProp(E, "Sequence " .. sq, "WrapAround", "Yes")
       end
-      l[#l + 1] = "Off Sequence " .. sq
-      cueCmd(E, sq, 1, table.concat(l, "; "))
       place(E, L, "Sequence " .. sq, COL.keys + j - 1, b, b == 0 and (k[1] .. " All") or k[1], "Go+")
      else
       local lines = {}
@@ -494,9 +503,9 @@ local function buildBumps(E, groups, o)
         local name = n == 1 and "1 Step" or (n .. " Steps")
         local cmd
         if b > 0 then
-          local l = {string.format('SetGlobalVariable "%s" "%d"', V("next", b), stepSeq(b, 1))}
-          for st = 1, NSTEP do
-            l[#l + 1] = string.format('SetGlobalVariable "%s" "%d"', V("after" .. st .. "_", b), stepSeq(b, st < n and st + 1 or 1))
+          local l = {}
+          for c = 1, NSTEP do
+            l[#l + 1] = string.format('Set Sequence %d Cue %d Part 0 Property "Command" "%s"', seqNo(b, J_STEPS), c, stepsCue(b, c, n))
           end
           cmd = table.concat(l, "; ")
         end
