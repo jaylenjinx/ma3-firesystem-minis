@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <GMA3 DataVersion="2.0.0.0">
-	<Plugin Name="FS Gobo Beam" Version="1.0.0" Author="FireSystem">
+	<Plugin Name="FS Gobo Beam" Version="1.1.0" Author="FireSystem">
 		<ComponentLua Name="FSGoboBeam" FileName="FSGoboBeam.lua" />
 	</Plugin>
 </GMA3>
