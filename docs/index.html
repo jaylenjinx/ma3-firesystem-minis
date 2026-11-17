@@ -92,6 +92,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li><a href="#gobo">FS Gobo Beam</a></li>
         <li><a href="#bumps">FS Bumps</a></li>
         <li><a href="#los">FS LOS</a></li>
+        <li><a href="#masters">FS Masters</a></li>
       </ul>
       <h4>More</h4>
       <ul>
@@ -120,6 +121,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <a class="card" href="#gobo"><b>FS Gobo Beam</b><span>Gobo, prism, spin, shutter, iris, frost, zoom, focus</span></a>
       <a class="card" href="#bumps"><b>FS Bumps</b><span>Bump, Go+ step, strobe and X-Key keys with live look pickers</span></a>
       <a class="card" href="#los"><b>FS LOS</b><span>Live Output System bumps, StartShow style</span></a>
+      <a class="card" href="#masters"><b>FS Masters</b><span>FireSystem&#39;s executor page 1: keys, group masters, speed masters</span></a>
     </div>
 
     <h2 id="install">Install</h2>
@@ -237,6 +239,17 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>Toggle groups in, pick a look, then hit a bump: All &gt;, All &lt;, Odd, Even, 1/3, 2/3, 3/3 or Chase.</li>
         <li>Dim, Gobo, Prism, Iris, Shutter, Zoom and Position are Goto lists: a tap opens every option (Dim 0-100 %, each gobo, prism and shutter slot of your fixtures). The 15 colours are one button each.</li>
         <li>Fade, Wings, Delay and Off time per bank. Change a look while a bump plays and it follows.</li>
+      </ul>
+    </section>
+
+    <section class="tool" id="masters">
+      <h2>FS Masters</h2>
+      <p class="file">FSMasters.xml</p>
+      <ul class="points">
+        <li>Fills an executor page the way FireSystem&#39;s page 1 is laid out, with columns 1 to 8 for the groups.</li>
+        <li>401&ndash;408 Rnd strobe, 301&ndash;308 Strobe (Flash), 201&ndash;208 group masters, 101&ndash;108 Bump and 191&ndash;198 X-Keys (Temp), 110 Strobe All. The keys are FS Bumps&#39; own, so run FS Bumps first.</li>
+        <li>Speed masters 1&ndash;5 on 210, 209, 409, 410 and 211, and playback masters 1 and 2 on 209 and 210 of the next page, named as in FireSystem.</li>
+        <li>An executor that holds something else is left as it is and listed.</li>
       </ul>
     </section>
 
