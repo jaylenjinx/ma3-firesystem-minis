@@ -2,6 +2,8 @@
 
 **Latest version: none yet**
 
+**Site:** https://jaylenjinx.github.io/ma3-firesystem-minis/
+
 Small grandMA3 plugins that each build one part of a FireSystem busking show and nothing else:
 presets, a colour picker, a position picker, dimmer FX, colour FX, gobo / beam pickers, bumps and an
 LOS. Each tool is a single file (`plugins/FS<Tool>.lua` + its XML) that runs on its own: the main
