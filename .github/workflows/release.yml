@@ -1,0 +1,89 @@
+# Builds a release: FireSystemMinis-<version>.zip (every tool's .xml + .lua) plus each file on its own.
+# The version must match VERSION (bumped in the PR, written into every plugins/FS*.xml by tools/make_tools.py).
+name: Release tools
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. v1.0.1 (the tag is made from main)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          tag="${INPUT_VERSION:-$GITHUB_REF_NAME}"
+          case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must look like v1.0.0, got '$tag'"; exit 1
+          fi
+          num="${tag#v}"
+          base="${num%%-*}"
+          if [ "$(cat VERSION)" != "$base" ]; then
+            echo "::error::VERSION says $(cat VERSION), the release is $num: bump VERSION and run tools/make_tools.py in a PR first"; exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "num=$num" >> "$GITHUB_OUTPUT"
+
+      - name: Install Lua 5.4
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.4
+
+      - name: Test, check, smoke
+        run: python3 tools/dev.py
+
+      - name: Package the tools
+        env:
+          NUM: ${{ steps.ver.outputs.num }}
+        run: |
+          mkdir -p dist/FireSystemMinis
+          cp plugins/FS*.lua plugins/FS*.xml dist/FireSystemMinis/
+          for x in dist/FireSystemMinis/*.xml; do
+            sed -i -E "s/(<Plugin [^>]*Version=\")[^\"]*\"/\1${NUM}\"/" "$x"
+          done
+          (cd dist && zip -r -9 "FireSystemMinis-${NUM}.zip" FireSystemMinis)
+          cp dist/FireSystemMinis/* dist/
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          NUM: ${{ steps.ver.outputs.num }}
+        run: |
+          cat > notes.md <<NOTES
+          **Install:** each tool is one \`.xml\` + \`.lua\` pair. Copy the ones you want (or everything in
+          \`FireSystemMinis-${NUM}.zip\`) into \`gma3_library/datapools/plugins/\`
+          (onPC: \`~/MALightingTechnology/gma3_library/datapools/plugins/\`, console: a USB stick with the same folders),
+          then import each tool's XML into the Plugins pool and click it once to build.
+          NOTES
+          prerelease=""
+          [[ "$TAG" == *-* ]] && prerelease="--prerelease"
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "FireSystem Minis $NUM" \
+            --notes-file notes.md --generate-notes $prerelease \
+            "dist/FireSystemMinis-${NUM}.zip" dist/FS*.lua dist/FS*.xml
+
+      - name: Update the README's latest version
+        if: ${{ !contains(steps.ver.outputs.tag, '-') }}
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          sed -i -E "s/^\*\*Latest version: [^*]*\*\*/**Latest version: ${TAG}**/" README.md
+          if git diff --quiet; then echo "README already says ${TAG}"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "README: latest version ${TAG}"
+          git push origin main
