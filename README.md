@@ -2,7 +2,7 @@
 
 **Latest version: v1.3.0**
 
-**Site:** https://jaylenjinx.github.io/ma3-firesystem-minis/
+**Site:** https://ma3-firesystem-minis.sulfurdesign.com/
 
 Small grandMA3 plugins that each build one part of a FireSystem busking show and nothing else:
 presets, a colour picker, a position picker, dimmer FX, colour FX, gobo / beam pickers, bumps and an
