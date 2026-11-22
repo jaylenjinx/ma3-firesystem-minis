@@ -150,15 +150,20 @@ local MX = {
   {"Phase",  {"Off", 90, 180, 360}},
   {"Fade",   {"Off", 1, 3, 5}},
   {"Delay",  {"Off", 1, 2, 4}},
+  -- the row's FX speed multiplier: MA's Speed Scale on the cues of its FX buttons (as FireSystem's
+  -- Rate), so the FX run at that multiple of their speed master. Needs o.rate in mxButtons
+  {"Speed",  {"x1", "x2", "x4", "1/4", "1/2"}},
 }
+local SPEED_SCALE = {x1 = "One", x2 = "Mul2", x4 = "Mul4", ["1/4"] = "Div4", ["1/2"] = "Div2"}
 local function mxText(f, v)
   local n = MX[f][1]
-  if v == "Off" or v == "On" then return n .. " " .. v end
+  if v == "Off" or v == "On" or n == "Speed" then return n .. " " .. v end
   return n .. " " .. v .. ((n == "Fade" or n == "Delay") and "s" or "")
 end
 -- the MAtricks properties for setting f at value v (X axis)
 local function mxProps(f, v)
   local n, on = MX[f][1], v ~= "Off"
+  if n == "Speed" then return {} end   -- (not a MAtricks setting)
   local function val(x) return on and tostring(x) or "None" end
   if n == "Wings" then return {{"XWings", val(v)}} end
   if n == "Sym" then return {{"PhaserTransform", on and "Mirror" or "None"}} end
@@ -178,7 +183,7 @@ local function makeMatricks(E, no, label)
   E.C("ClearAll")
   E.Cany({ string.format("Store MAtricks %d /Overwrite", no), string.format("Store MAtricks %d", no) })
   E.C("Label MAtricks %d %s", no, E.q(label))
-  for f = 1, #MX do E.C("%s", mxSetCmd(E, no, f, "Off")) end
+  for f = 1, #MX do if #mxProps(f, "Off") > 0 then E.C("%s", mxSetCmd(E, no, f, "Off")) end end
 end
 
 
@@ -195,7 +200,8 @@ end
 -- each cue sets the row's MAtricks object (o.mx0 + row - 1) and the button's text. ALL: each cue
 -- sends every row's button to that value. o = {L, n, names, mx0, seq0, col, row = function(r)
 -- (r = 0 for ALL) -> layout row, P = name prefix, AP = {idle, lit}, list = MX indices,
--- vals = {MX name = {values}}: optional, instead of MX's own values}.
+-- vals = {MX name = {values}}: optional, instead of MX's own values,
+-- rate = function(row) -> {{seq, cues}, ...}: the row's FX sequences, for the Speed button}.
 -- Returns the next free sequence number.
 local function mxButtons(E, o)
   local L, n, list = o.L, o.n, o.list
@@ -214,7 +220,8 @@ local function mxButtons(E, o)
       local steps = {}
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do steps[k] = {mxText(f, v), k == 1 and o.AP.idle or o.AP.lit} end
       cycleSeq(E, sq, o.P .. (all and "ALL" or o.names[row]) .. " " .. name, steps)
-      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, "Off"))
+      local vals = (o.vals and o.vals[name]) or MX[f][2]
+      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, vals[1]))
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do
         local cmd = {}
         if all then
@@ -223,6 +230,12 @@ local function mxButtons(E, o)
           -- a cue fade on the row's buttons (cue 1), not the MAtricks fade
           for _, rg in ipairs(o.cueFade(row)) do
             cmd[#cmd + 1] = string.format('Set Sequence %s Cue 1 Property "CueInFade" %s', rg, v == "Off" and "0" or tostring(v))
+          end
+        elseif name == "Speed" then
+          -- the speed scale of every cue of the row's FX buttons
+          for _, s in ipairs(o.rate and o.rate(row) or {}) do
+            cmd[#cmd + 1] = string.format('Set Sequence %d Cue %s Part 0 Property "SpeedScale" "%s"', s[1],
+              s[2] > 1 and ("1 Thru " .. s[2]) or "1", SPEED_SCALE[v] or "One")
           end
         elseif name == "Sym" then
           -- the row's mirror command is kept in a variable: Wings sends it again after each change,

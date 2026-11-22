@@ -38,7 +38,7 @@ local STEP_DEFAULT = {"White", "Red", "Blue", "Green", "Magenta"}
 -- preset rainbow): it ignores the STEP colours and the step count
 local FORMS = { {"Sine", "sine"}, {"Ramp Dn", "down"}, {"Ramp Up", "up"}, {"Square", "square"}, {"Heart", "rainbow"} }
 local RAINBOW = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Violet", "Magenta"}
-local MXL = mxList("Wings", "Groups", "Blocks", "Phase")
+local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Speed")
 local NMX = #MXL
 local NF = #FORMS
 -- macros per row: Off, 2 / 3 Steps
@@ -325,7 +325,8 @@ local function buildFX(E, groups, o)
   -- the MAtricks buttons (lib picker) on each block's forms row
   local seq = seq0 + nG * SPR + NSTEP
   seq = mxButtons(E, {L = L, n = nG, names = names, mx0 = mx0, seq0 = seq, col = stepCol + NSTEP + 0.25,
-                      row = function(r) return r end, P = P, AP = AP, list = MXL})
+                      row = function(r) return r end, P = P, AP = AP, list = MXL,
+                      rate = function(r) local l = {} for f = 1, NF do l[f] = {formSeqNo(r, f), NSTEP} end return l end})
   E.C("ClearAll")
   svar("mtx", mx0) svar("speed", o.speed) svar("step", st0)
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("macro", M0) svar("ap", ap0)

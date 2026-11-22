@@ -5,8 +5,8 @@
   the groups (up to 20), how many LOS banks (1-4) and the pool numbers, then builds a layout with one
   block per bank:
 
-    [group 1..8 toggles]                                    [Fade 0 / input]  [Wings 0 / 2]
-    [Dim] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]      [Delay 0 / input] [Off 0 / input]
+    [group toggles]                                         [Fade 0 / input]  [Wings 0 / 2]    [Blocks 0]
+    [Dim] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]      [Delay 0 / input] [Off 0 / input]  [Blocks input]
     [Color Off + 15 colours]
     [BUMPS: All >  All <  Odd  Even  1/3  2/3  3/3  Chase]   (sequences: put them on X-keys / executors)
 
@@ -19,8 +19,8 @@
     preset. A group button includes / excludes the group: its macro assigns the group to those lines
     (tap 1) or clears it (tap 2, the macro waits on a Go between the two halves);
   - each bump has its own MAtricks: All > / All < spread the Delay forwards / backwards, Odd / Even
-    = X Group 2, 1/3 2/3 3/3 = X Group 3, Chase steps 1/3 > 2/3 > 3/3 (1 s per step). Fade and Wings set
-    every MAtricks of the bank; Off sets the bumps' OffCue fade (the release time).
+    = X Group 2, 1/3 2/3 3/3 = X Group 3, Chase steps 1/3 > 2/3 > 3/3 (1 s per step). Fade, Wings and Blocks
+    set every MAtricks of the bank; Off sets the bumps' OffCue fade (the release time).
   Change a look while a bump plays and the bump changes with it. The show doesn't need the plugin
   afterwards.
 
@@ -62,7 +62,7 @@ local NPICK = #FAMS - 1   -- the Goto lists (all but Color)
 local TIMING_COL = 9.25
 local BLOCK_ROWS = 4.5
 
-local function perBank(nG, nC) return {seq = #BUMPS + NPICK, mtx = #MXK, macro = nG + 1 + nC + 8} end
+local function perBank(nG, nC) return {seq = #BUMPS + NPICK, mtx = #MXK, macro = nG + 1 + nC + 10} end
 
 local function minePreset(E, no)
   local h = E.obj("Preset 21." .. no)
@@ -341,13 +341,18 @@ local function buildLOS(E, groups, o)
       return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), apply,
               idx and string.format('Set Layout %d.%d Property "CustomTextText" $%s', L, idx, var) or nil}
     end
-    local fadeT, delayT, offT
+    local fadeT, delayT, offT, blocksT
     btn(B .. "Fade 0", "Fade 0", TC0, 0, AP.idle, function() return {setAll({{"FadeFromX", '"None"'}, {"FadeToX", '"None"'}}),
       fadeT and string.format('Set Layout %d.%d Property "CustomTextText" "Fade"', L, fadeT.idx) or nil} end, true)
     fadeT = btn(B .. "Fade input", "Fade", TC0 + 1, 0, AP.idle, function(me)
       return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", "$" .. V("fade")}, {"FadeToX", "$" .. V("fade")}}), me.idx) end)
     btn(B .. "Wings 0", "Wings 0", TC0 + 2.25, 0, AP.idle, function() return {setAll({{"XWings", '"None"'}})} end, true)
     btn(B .. "Wings 2", "Wings 2", TC0 + 3.25, 0, AP.idle, function() return {setAll({{"XWings", '"2"'}})} end)
+    -- Blocks: XBlock on every MAtricks of the bank (fixtures in blocks of n act as one)
+    btn(B .. "Blocks 0", "Blocks 0", TC0 + 4.5, 0, AP.idle, function() return {setAll({{"XBlock", '"None"'}}),
+      blocksT and string.format('Set Layout %d.%d Property "CustomTextText" "Blocks"', L, blocksT.idx) or nil} end, true)
+    blocksT = btn(B .. "Blocks", "Blocks", TC0 + 4.5, 1, AP.idle, function(me)
+      return input(V("blocks"), "LOS " .. b .. " Blocks", setAll({{"XBlock", "$" .. V("blocks")}}), me.idx) end)
     local A, Bm = mtxNo.A, mtxNo.B
     btn(B .. "Delay 0", "Delay 0", TC0, 1, AP.idle, function()
       return {string.format('Set MAtricks %d Thru %d Property "DelayFromX" "None" "DelayToX" "None"', A, Bm),
