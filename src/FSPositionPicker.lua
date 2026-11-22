@@ -4,7 +4,7 @@
   One of the single-purpose FireSystem tools. Run it (click it in the Plugins pool) and it asks for
   the groups and the pool numbers, then builds a layout with an ALL row and one row per group:
 
-    [group] [12 pans / fans] [7 tilts]
+    [group] [12 pans / fans] [15 tilts]
     and below, a second section:
     [group] [8 position FX] [Small / Mid / Big] [7 MAtricks]
 
@@ -55,8 +55,13 @@ local function positionPresets(E)
     if p[2] and at["2:" .. p[2]] then pans[#pans + 1] = {name = p[2], at = at["2:" .. p[2]]} end
   end
   for _, t in ipairs(E.TILTS) do
-    if t[2] and at["2:" .. t[2]] then tilts[#tilts + 1] = {name = t[2], at = at["2:" .. t[2]]} end
+    if t[2] and at["2:" .. t[2]] then tilts[#tilts + 1] = {name = t[2], at = at["2:" .. t[2]], deg = t[3]} end
   end
+  for _, v in ipairs(EXTRA_TILTS) do
+    local name = "Tilt " .. v
+    if at["2:" .. name] then tilts[#tilts + 1] = {name = name, at = at["2:" .. name], deg = v} end
+  end
+  table.sort(tilts, function(a, b) return a.deg < b.deg end)   -- back to front
   local ALL = 21
   local function addFx(name)
     local s = {}
@@ -258,7 +263,8 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
   -- the MAtricks buttons (lib picker): after Small / Mid / Big on the FX rows
   seq = mxButtons(E, {L = L, n = #groups, names = names, mx0 = mx0, seq0 = seq, col = sizeCol + 3.25,
                       row = function(r) return FXB + r end, P = P, AP = AP,
-                      list = mxList("Wings", "Sym", "Groups", "Blocks", "Phase", "Fade", "Delay")})
+                      list = mxList("Wings", "Sym", "Groups", "Blocks", "Phase", "Fade", "Delay", "Speed"),
+                      rate = function(r) local l = {} for _, sq in ipairs(fxSeqs[r] or {}) do l[#l + 1] = {sq, 4} end return l end})
   -- and Fade at the end of the pan / tilt rows (Lyn: a fade for the position changes, separate
   -- from the FX one): the cue fade of the row's pan / tilt buttons
   local posSeqs = {}
@@ -291,8 +297,8 @@ local function main(displayHandle, argument)
     env = E
   end
   local E = env
-  -- (12 pans + 7 tilts + 8 FX: the count for the dialog; the build counts what it really finds)
-  local groups, L, seq0, M0, ap0, mx0, speed = ask(E, 27)
+  -- (12 pans + 15 tilts + 8 FX: the count for the dialog; the build counts what it really finds)
+  local groups, L, seq0, M0, ap0, mx0, speed = ask(E, 35)
   if not groups then return end
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end

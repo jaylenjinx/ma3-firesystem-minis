@@ -45,6 +45,9 @@ local function poolOf(lines, orig)
   end
   return found or (orig ~= ALL_POOL and orig) or ALL_POOL
 end
+-- tilts on top of FireSystem's 7 (Back -20, Down 0, 15, 30, 45, 60, Flat 90), in degrees: numbered
+-- after them in the Position pool, so the presets before keep their numbers (Lyn 2026-11-22)
+local EXTRA_TILTS = {-90, -60, -45, -30, -10, 10, 20, 75}
 local FAM_ORDER = {dim = 1, pos = 2, pfx = 3, col = 4, zoom = 5, gobo = 6, strobe = 7, rot = 8, beam = 9}
 
 -- plan: every preset the FireSystem code would make (all families, so a preset's number doesn't
@@ -92,6 +95,16 @@ local function plan(E, coloursOnly)
   end)
   E.storePreset = store
   if not ok then error(err, 0) end
+  -- the extra tilts, made like FireSystem's own (its "Tilt 15" preset with the angle changed)
+  local tmpl
+  for _, r in ipairs(recs) do if r.pool == 2 and r.label == "Tilt 15" then tmpl = r end end
+  if tmpl then
+    for _, v in ipairs(EXTRA_TILTS) do
+      local l = {}
+      for i, x in ipairs(tmpl.lines) do l[i] = (tostring(x):gsub(" At 15$", " At " .. v)) end
+      recs[#recs + 1] = {fam = "pos", pool = 2, label = "Tilt " .. v, lines = l}
+    end
+  end
   -- Focus 0-100 % in steps of 10 (Focus pool 6, next to the zoom steps)
   for v = 0, 100, 10 do
     recs[#recs + 1] = {fam = "zoom", pool = 6, label = "Focus " .. v .. "%", lines = {string.format('?Attribute "Focus1" At %d', v)}}

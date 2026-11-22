@@ -7,8 +7,8 @@
   the groups (up to 20), how many LOS banks (1-4) and the pool numbers, then builds a layout with one
   block per bank:
 
-    [group 1..8 toggles]                                    [Fade 0 / input]  [Wings 0 / 2]
-    [Dim] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]      [Delay 0 / input] [Off 0 / input]
+    [group toggles]                                         [Fade 0 / input]  [Wings 0 / 2]    [Blocks 0]
+    [Dim] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]      [Delay 0 / input] [Off 0 / input]  [Blocks input]
     [Color Off + 15 colours]
     [BUMPS: All >  All <  Odd  Even  1/3  2/3  3/3  Chase]   (sequences: put them on X-keys / executors)
 
@@ -21,8 +21,8 @@
     preset. A group button includes / excludes the group: its macro assigns the group to those lines
     (tap 1) or clears it (tap 2, the macro waits on a Go between the two halves);
   - each bump has its own MAtricks: All > / All < spread the Delay forwards / backwards, Odd / Even
-    = X Group 2, 1/3 2/3 3/3 = X Group 3, Chase steps 1/3 > 2/3 > 3/3 (1 s per step). Fade and Wings set
-    every MAtricks of the bank; Off sets the bumps' OffCue fade (the release time).
+    = X Group 2, 1/3 2/3 3/3 = X Group 3, Chase steps 1/3 > 2/3 > 3/3 (1 s per step). Fade, Wings and Blocks
+    set every MAtricks of the bank; Off sets the bumps' OffCue fade (the release time).
   Change a look while a bump plays and the bump changes with it. The show doesn't need the plugin
   afterwards.
 
@@ -9953,6 +9953,9 @@ local function poolOf(lines, orig)
   end
   return found or (orig ~= ALL_POOL and orig) or ALL_POOL
 end
+-- tilts on top of FireSystem's 7 (Back -20, Down 0, 15, 30, 45, 60, Flat 90), in degrees: numbered
+-- after them in the Position pool, so the presets before keep their numbers (Lyn 2026-11-22)
+local EXTRA_TILTS = {-90, -60, -45, -30, -10, 10, 20, 75}
 local FAM_ORDER = {dim = 1, pos = 2, pfx = 3, col = 4, zoom = 5, gobo = 6, strobe = 7, rot = 8, beam = 9}
 
 -- plan: every preset the FireSystem code would make (all families, so a preset's number doesn't
@@ -10000,6 +10003,16 @@ local function plan(E, coloursOnly)
   end)
   E.storePreset = store
   if not ok then error(err, 0) end
+  -- the extra tilts, made like FireSystem's own (its "Tilt 15" preset with the angle changed)
+  local tmpl
+  for _, r in ipairs(recs) do if r.pool == 2 and r.label == "Tilt 15" then tmpl = r end end
+  if tmpl then
+    for _, v in ipairs(EXTRA_TILTS) do
+      local l = {}
+      for i, x in ipairs(tmpl.lines) do l[i] = (tostring(x):gsub(" At 15$", " At " .. v)) end
+      recs[#recs + 1] = {fam = "pos", pool = 2, label = "Tilt " .. v, lines = l}
+    end
+  end
   -- Focus 0-100 % in steps of 10 (Focus pool 6, next to the zoom steps)
   for v = 0, 100, 10 do
     recs[#recs + 1] = {fam = "zoom", pool = 6, label = "Focus " .. v .. "%", lines = {string.format('?Attribute "Focus1" At %d', v)}}
@@ -10313,15 +10326,20 @@ local MX = {
   {"Phase",  {"Off", 90, 180, 360}},
   {"Fade",   {"Off", 1, 3, 5}},
   {"Delay",  {"Off", 1, 2, 4}},
+  -- the row's FX speed multiplier: MA's Speed Scale on the cues of its FX buttons (as FireSystem's
+  -- Rate), so the FX run at that multiple of their speed master. Needs o.rate in mxButtons
+  {"Speed",  {"x1", "x2", "x4", "1/4", "1/2"}},
 }
+local SPEED_SCALE = {x1 = "One", x2 = "Mul2", x4 = "Mul4", ["1/4"] = "Div4", ["1/2"] = "Div2"}
 local function mxText(f, v)
   local n = MX[f][1]
-  if v == "Off" or v == "On" then return n .. " " .. v end
+  if v == "Off" or v == "On" or n == "Speed" then return n .. " " .. v end
   return n .. " " .. v .. ((n == "Fade" or n == "Delay") and "s" or "")
 end
 -- the MAtricks properties for setting f at value v (X axis)
 local function mxProps(f, v)
   local n, on = MX[f][1], v ~= "Off"
+  if n == "Speed" then return {} end   -- (not a MAtricks setting)
   local function val(x) return on and tostring(x) or "None" end
   if n == "Wings" then return {{"XWings", val(v)}} end
   if n == "Sym" then return {{"PhaserTransform", on and "Mirror" or "None"}} end
@@ -10341,7 +10359,7 @@ local function makeMatricks(E, no, label)
   E.C("ClearAll")
   E.Cany({ string.format("Store MAtricks %d /Overwrite", no), string.format("Store MAtricks %d", no) })
   E.C("Label MAtricks %d %s", no, E.q(label))
-  for f = 1, #MX do E.C("%s", mxSetCmd(E, no, f, "Off")) end
+  for f = 1, #MX do if #mxProps(f, "Off") > 0 then E.C("%s", mxSetCmd(E, no, f, "Off")) end end
 end
 
 
@@ -10358,7 +10376,8 @@ end
 -- each cue sets the row's MAtricks object (o.mx0 + row - 1) and the button's text. ALL: each cue
 -- sends every row's button to that value. o = {L, n, names, mx0, seq0, col, row = function(r)
 -- (r = 0 for ALL) -> layout row, P = name prefix, AP = {idle, lit}, list = MX indices,
--- vals = {MX name = {values}}: optional, instead of MX's own values}.
+-- vals = {MX name = {values}}: optional, instead of MX's own values,
+-- rate = function(row) -> {{seq, cues}, ...}: the row's FX sequences, for the Speed button}.
 -- Returns the next free sequence number.
 local function mxButtons(E, o)
   local L, n, list = o.L, o.n, o.list
@@ -10377,7 +10396,8 @@ local function mxButtons(E, o)
       local steps = {}
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do steps[k] = {mxText(f, v), k == 1 and o.AP.idle or o.AP.lit} end
       cycleSeq(E, sq, o.P .. (all and "ALL" or o.names[row]) .. " " .. name, steps)
-      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, "Off"))
+      local vals = (o.vals and o.vals[name]) or MX[f][2]
+      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, vals[1]))
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do
         local cmd = {}
         if all then
@@ -10386,6 +10406,12 @@ local function mxButtons(E, o)
           -- a cue fade on the row's buttons (cue 1), not the MAtricks fade
           for _, rg in ipairs(o.cueFade(row)) do
             cmd[#cmd + 1] = string.format('Set Sequence %s Cue 1 Property "CueInFade" %s', rg, v == "Off" and "0" or tostring(v))
+          end
+        elseif name == "Speed" then
+          -- the speed scale of every cue of the row's FX buttons
+          for _, s in ipairs(o.rate and o.rate(row) or {}) do
+            cmd[#cmd + 1] = string.format('Set Sequence %d Cue %s Part 0 Property "SpeedScale" "%s"', s[1],
+              s[2] > 1 and ("1 Thru " .. s[2]) or "1", SPEED_SCALE[v] or "One")
           end
         elseif name == "Sym" then
           -- the row's mirror command is kept in a variable: Wings sends it again after each change,
@@ -10450,7 +10476,7 @@ local NPICK = #FAMS - 1   -- the Goto lists (all but Color)
 local TIMING_COL = 9.25
 local BLOCK_ROWS = 4.5
 
-local function perBank(nG, nC) return {seq = #BUMPS + NPICK, mtx = #MXK, macro = nG + 1 + nC + 8} end
+local function perBank(nG, nC) return {seq = #BUMPS + NPICK, mtx = #MXK, macro = nG + 1 + nC + 10} end
 
 local function minePreset(E, no)
   local h = E.obj("Preset 21." .. no)
@@ -10729,13 +10755,18 @@ local function buildLOS(E, groups, o)
       return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), apply,
               idx and string.format('Set Layout %d.%d Property "CustomTextText" $%s', L, idx, var) or nil}
     end
-    local fadeT, delayT, offT
+    local fadeT, delayT, offT, blocksT
     btn(B .. "Fade 0", "Fade 0", TC0, 0, AP.idle, function() return {setAll({{"FadeFromX", '"None"'}, {"FadeToX", '"None"'}}),
       fadeT and string.format('Set Layout %d.%d Property "CustomTextText" "Fade"', L, fadeT.idx) or nil} end, true)
     fadeT = btn(B .. "Fade input", "Fade", TC0 + 1, 0, AP.idle, function(me)
       return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", "$" .. V("fade")}, {"FadeToX", "$" .. V("fade")}}), me.idx) end)
     btn(B .. "Wings 0", "Wings 0", TC0 + 2.25, 0, AP.idle, function() return {setAll({{"XWings", '"None"'}})} end, true)
     btn(B .. "Wings 2", "Wings 2", TC0 + 3.25, 0, AP.idle, function() return {setAll({{"XWings", '"2"'}})} end)
+    -- Blocks: XBlock on every MAtricks of the bank (fixtures in blocks of n act as one)
+    btn(B .. "Blocks 0", "Blocks 0", TC0 + 4.5, 0, AP.idle, function() return {setAll({{"XBlock", '"None"'}}),
+      blocksT and string.format('Set Layout %d.%d Property "CustomTextText" "Blocks"', L, blocksT.idx) or nil} end, true)
+    blocksT = btn(B .. "Blocks", "Blocks", TC0 + 4.5, 1, AP.idle, function(me)
+      return input(V("blocks"), "LOS " .. b .. " Blocks", setAll({{"XBlock", "$" .. V("blocks")}}), me.idx) end)
     local A, Bm = mtxNo.A, mtxNo.B
     btn(B .. "Delay 0", "Delay 0", TC0, 1, AP.idle, function()
       return {string.format('Set MAtricks %d Thru %d Property "DelayFromX" "None" "DelayToX" "None"', A, Bm),
