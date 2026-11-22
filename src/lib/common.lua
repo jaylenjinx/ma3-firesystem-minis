@@ -6,6 +6,7 @@ local MODULES = {"Config", "Core", "Art", "Looks", "State", "Fire", "Bumps", "La
                  "Setup", "Views", "Home", "Timecode", "TCEditor", "Commands"}
 
 local G = _ENV
+local MAX_GROUPS = 20   -- groups a tool takes (8 by default: Groups 1-8 that exist)
 local env
 
 -- this plugin's own copy of the FireSystem modules (filled in by tools/make_tools.py)

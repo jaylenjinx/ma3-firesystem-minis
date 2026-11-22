@@ -42,6 +42,7 @@ local MODULES = {"Config", "Core", "Art", "Looks", "State", "Fire", "Bumps", "La
                  "Setup", "Views", "Home", "Timecode", "TCEditor", "Commands"}
 
 local G = _ENV
+local MAX_GROUPS = 20   -- groups a tool takes (8 by default: Groups 1-8 that exist)
 local env
 
 -- this plugin's own copy of the FireSystem modules (filled in by tools/make_tools.py)
@@ -10480,7 +10481,7 @@ local function ask(E)
   local nSeq = rows * NP + #ALL_PICKS + (rows + 1) * NMX
   local r = MessageBox({
     title = TITLE,
-    message = "Groups for the gobo / beam rows (up to 8), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
+    message = "Groups for the gobo / beam rows (up to 20), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
               "The numbers below are where the layout and its sequences, appearances and MAtricks go\n" ..
               string.format("(%d sequences, %d appearances, %d MAtricks).", nSeq, AP_N, rows),
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
@@ -10634,7 +10635,7 @@ local function main(displayHandle, argument)
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (o.L and o.seq0 and o.ap0 and o.mx0) then
     return say("Fill in the layout, first sequence, appearance and MAtricks numbers.")
   end

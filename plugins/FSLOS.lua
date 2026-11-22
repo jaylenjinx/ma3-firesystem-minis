@@ -4,7 +4,7 @@
   FSLOS.lua  -  "FS LOS": Live Output System bumps, built the way MA's StartShow LOS works
   ------------------------------------------------------------------------
   One of the single-purpose FireSystem tools. Run it (click it in the Plugins pool) and it asks for
-  the groups (up to 8), how many LOS banks (1-4) and the pool numbers, then builds a layout with one
+  the groups (up to 20), how many LOS banks (1-4) and the pool numbers, then builds a layout with one
   block per bank:
 
     [group 1..8 toggles]                                    [Fade 0 / input]  [Wings 0 / 2]
@@ -42,6 +42,7 @@ local MODULES = {"Config", "Core", "Art", "Looks", "State", "Fire", "Bumps", "La
                  "Setup", "Views", "Home", "Timecode", "TCEditor", "Commands"}
 
 local G = _ENV
+local MAX_GROUPS = 20   -- groups a tool takes (8 by default: Groups 1-8 that exist)
 local env
 
 -- this plugin's own copy of the FireSystem modules (filled in by tools/make_tools.py)
@@ -10470,10 +10471,11 @@ local function ask(E, nC)
   if not pre then pre = 901 while pre < 9999 and not (minePreset(E, pre) and minePreset(E, pre + NB_MAX - 1)) do pre = pre + 1 end end
   local r = MessageBox({
     title = TITLE,
-    message = "Groups the LOS can include (up to 8), e.g. 1 Thru 8, and how many LOS banks (1-4; each has its own\n" ..
+    message = "Groups the LOS can include (up to 20), e.g. 1 Thru 8, and how many LOS banks (1-4; each has its own\n" ..
               "8 bumps for X-keys). The numbers below are where the layout, sequences, macros, appearances,\n" ..
-              string.format("MAtricks and the LOS presets (All pool) go. Per bank: %d sequences, %d macros, %d MAtricks, 1 preset.",
-                            pb.seq, pb.macro, pb.mtx),
+              string.format("MAtricks and the LOS presets (All pool) go. Per bank: %d sequences, %d macros, %d MAtricks, 1 preset.\n",
+                            pb.seq, pb.macro, pb.mtx) ..
+              "Speed / Rate master: the masters the LOS bumps follow (0 = none; FireSystem's bumps use 4 and 5).",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
@@ -10484,6 +10486,8 @@ local function ask(E, nC)
       {name = "First appearance", value = def("ap", "Appearance", 5 + 2 * nC, 101), whiteFilter = "0123456789"},
       {name = "First MAtricks", value = def("mtx", "MAtricks", NB_MAX * pb.mtx, 1), whiteFilter = "0123456789"},
       {name = "First LOS preset (All pool 21)", value = tostring(pre), whiteFilter = "0123456789"},
+      {name = "Speed master", value = tostring(tonumber(gvar("speed") or "") or 4), whiteFilter = "0123456789"},
+      {name = "Rate master", value = tostring(tonumber(gvar("rate") or "") or 5), whiteFilter = "0123456789"},
     },
   })
   if not r or r.result ~= 1 then return nil end
@@ -10491,7 +10495,7 @@ local function ask(E, nC)
   local function n(k) return tonumber(i[k] or "") end
   return parseGroups(i["Groups"]), {nb = math.max(1, math.min(NB_MAX, n("LOS banks") or 2)), L = n("Layout"),
     seq0 = n("First sequence"), M0 = n("First macro"), ap0 = n("First appearance"), mx0 = n("First MAtricks"),
-    pre = n("First LOS preset (All pool 21)")}
+    pre = n("First LOS preset (All pool 21)"), speed = n("Speed master") or 0, rate = n("Rate master") or 0}
 end
 
 -- the presets the look lists point at: FS Presets' plan (made here when missing). Returns
@@ -10645,6 +10649,8 @@ local function buildLOS(E, groups, o)
       setProp(E, "Sequence " .. seq, "OffWhenOverridden", "Yes")
       if #bu[2] > 1 then setProp(E, "Sequence " .. seq, "WrapAround", "Yes") end
       E.C("Assign Appearance %d At Sequence %d", AP.bump, seq)
+      if (o.speed or 0) > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", o.speed) end
+      if (o.rate or 0) > 0 then E.trySeqMaster(seq, "RateMaster", "Speed", o.rate) end
     end
     local sAll = string.format("%d Thru %d", s0, s0 + #BUMPS - 1)
 
@@ -10717,7 +10723,7 @@ local function buildLOS(E, groups, o)
     -- timing: Fade / Wings on every MAtricks of the bank, Delay spread forwards (All >) and
     -- backwards (All <), Off = the bumps' release time
     local mAll = string.format("%d Thru %d", x0, x0 + #MXK - 1)
-    local TC0 = TIMING_COL
+    local TC0 = math.max(TIMING_COL, nG + 0.25)   -- right of the group toggles (up to 20)
     local function setAll(props) local l = {} for _, p in ipairs(props) do l[#l + 1] = string.format('Set MAtricks %s Property "%s" %s', mAll, p[1], p[2]) end return table.concat(l, "; ") end
     local function input(var, prompt, apply, idx)
       return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), apply,
@@ -10774,6 +10780,7 @@ local function buildLOS(E, groups, o)
   E.C("ClearAll")
   svar("groups", E.rangeList({table.unpack(groups)})) svar("banks", NB) svar("layout", L) svar("seq", seq0)
   svar("macro", M0) svar("ap", ap0) svar("mtx", mx0) svar("preset", pre0)
+  svar("speed", o.speed or 0) svar("rate", o.rate or 0)
   table.insert(lines, 1, string.format("Layout %d: %d LOS bank(s) for %d groups.", L, NB, nG))
   lines[#lines + 1] = "Tap a group button to include it in that bank's bumps (tap again to leave it out); put the bump sequences on X-keys / executors."
   if madeP > 0 then lines[#lines + 1] = string.format("%d missing presets were made.", madeP) end
@@ -10796,7 +10803,7 @@ local function main(displayHandle, argument)
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (o.L and o.seq0 and o.M0 and o.ap0 and o.mx0 and o.pre) then
     return say("Fill in the layout, first sequence, macro, appearance, MAtricks and LOS preset numbers.")
   end
