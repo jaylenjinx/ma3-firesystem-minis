@@ -2,8 +2,8 @@
   FSMasters.lua  -  "FS Masters": FireSystem's executor page 1, nothing else
   ------------------------------------------------------------------------
   One of the single-purpose FireSystem tools. Run it (click it in the Plugins pool) and it asks for
-  the groups (up to 8) and the page, then fills that page the way FireSystem's page 1 is laid out
-  (columns 1-8 = the groups):
+  the groups (up to 20) and the page, then fills that page the way FireSystem's page 1 is laid out
+  (columns 1-8 = the groups; groups 9-16 go in the same columns of the next page, 17-20 the one after):
 
     401-408  Rnd strobe keys     (FS Bumps "Rnd", Flash)
     301-308  Strobe keys         (FS Bumps "Strobe", Flash)
@@ -119,10 +119,10 @@ local function buildMasters(E, groups, pg, skip)
     setKey(p, ex, k)
     placed = placed + 1
   end
-  local function key(label, ex, k)
+  local function key(label, ex, k, p)
     local no = seqNamed(E.CFG.PREFIX .. " BS " .. label)
     if not no then missing[#missing + 1] = label return end
-    put(no, pg, ex, k)
+    put(no, p or pg, ex, k)
   end
 
   -- a group's FS Dimmer FX buttons ("FS DF <group name> <button>")
@@ -153,21 +153,24 @@ local function buildMasters(E, groups, pg, skip)
   local noDim = {}
 
   for gi, g in ipairs(groups) do
-    for _, r in ipairs(ROWS) do key(names[gi] .. " " .. r[1], r[2] + gi, r[3]) end
-    local ex = GROUP_BASE + gi
-    local was = holds(pg, ex)
+    -- 8 groups per page: groups 9-16 in the same columns of the next page, and so on
+    local gp, col = pg + math.floor((gi - 1) / 8), (gi - 1) % 8 + 1
+    if gp > pg + 1 and not E.obj("Page " .. gp) then E.C("Store Page %d", gp) end
+    for _, r in ipairs(ROWS) do key(names[gi] .. " " .. r[1], r[2] + col, r[3], gp) end
+    local ex = GROUP_BASE + col
+    local was = holds(gp, ex)
     if skip then
       -- a playback master on the group's Dimmer FX buttons; the fader goes to 100 % only when newly assigned
       local n, label = PB_BASE + gi, names[gi] .. " Dim"
       local seqs = dimSeqs(gi)
       if #seqs == 0 then noDim[#noDim + 1] = names[gi] end
       for _, s in ipairs(seqs) do linkPB(s, n, label) end
-      if free(pg, ex, "Master", n) then
+      if free(gp, ex, "Master", n) then
         if not (was and was[1]:find("Master") and was[2] == n) then
-          E.Cany({ string.format('Assign Master "Playback".%d At Page %d.%d', n, pg, ex),
-                   string.format("Assign Master Playback.%d At Page %d.%d", n, pg, ex),
-                   string.format("Assign PlaybackMaster %d At Page %d.%d", n, pg, ex) })
-          E.Cany({ string.format("Fader Page %d.%d At 100", pg, ex), string.format("Page %d.%d At 100", pg, ex) })
+          E.Cany({ string.format('Assign Master "Playback".%d At Page %d.%d', n, gp, ex),
+                   string.format("Assign Master Playback.%d At Page %d.%d", n, gp, ex),
+                   string.format("Assign PlaybackMaster %d At Page %d.%d", n, gp, ex) })
+          E.Cany({ string.format("Fader Page %d.%d At 100", gp, ex), string.format("Page %d.%d At 100", gp, ex) })
         end
         placed = placed + 1
       end
@@ -177,11 +180,11 @@ local function buildMasters(E, groups, pg, skip)
         E.Cany({ string.format('Label Master "Playback".%d %s', n, E.q(label)),
                  string.format("Label Master Playback.%d %s", n, E.q(label)) })
       end
-    elseif free(pg, ex, "Group", g) then
+    elseif free(gp, ex, "Group", g) then
       -- group master: the group itself; the fader goes to 100 % only when newly assigned
       if not (was and was[1] == "Group" and was[2] == g) then
-        E.C("Assign Group %d At Page %d.%d", g, pg, ex)
-        E.Cany({ string.format("Fader Page %d.%d At 100", pg, ex), string.format("Page %d.%d At 100", pg, ex) })
+        E.C("Assign Group %d At Page %d.%d", g, gp, ex)
+        E.Cany({ string.format("Fader Page %d.%d At 100", gp, ex), string.format("Page %d.%d At 100", gp, ex) })
       end
       placed = placed + 1
     end
@@ -228,7 +231,7 @@ local function buildMasters(E, groups, pg, skip)
   local lines = {string.format("Page %d: %d executors for %d groups (playback masters on page %d).", pg, placed, #groups, pg + 1)}
   if skip then
     lines[#lines + 1] = string.format("Faders %d-%d: Playback masters %d-%d on each group's FS Dimmer FX buttons (bumps and LOS ignore them).",
-      GROUP_BASE + 1, GROUP_BASE + #groups, PB_BASE + 1, PB_BASE + #groups)
+      GROUP_BASE + 1, GROUP_BASE + math.min(8, #groups), PB_BASE + 1, PB_BASE + #groups)
     if #noDim > 0 then
       lines[#lines + 1] = "No FS Dimmer FX buttons yet for: " .. table.concat(noDim, ", ") .. ". Run FS Dimmer FX, then run " .. TITLE .. " again."
     end
@@ -259,7 +262,8 @@ local function main(displayHandle, argument)
   local E = env
   local r = MessageBox({
     title = TITLE,
-    message = "Groups for columns 1-8 (up to 8), e.g. 1 Thru 8, and the executor page to fill (FireSystem uses page 1;\n" ..
+    message = "Groups for columns 1-8 (up to 20: groups 9-16 go in the same columns of the next page, 17-20 the page after),\n" ..
+              "e.g. 1 Thru 8, and the executor page to fill (FireSystem uses page 1;\n" ..
               "the playback masters go on the page after it). The keys are FS Bumps' sequences and the X-keys FS LOS's bumps:\n" ..
               "run those first.\n" ..
               SKIP .. ": faders 201-208 dim each group's FS Dimmer FX buttons (run FS Dimmer FX first) and the\n" ..
@@ -277,7 +281,7 @@ local function main(displayHandle, argument)
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not pg or pg < 1 then return say("Fill in the page number.") end
   local skip = not (r.states and r.states[SKIP] == false)
   svar("skip", skip and "1" or "0")

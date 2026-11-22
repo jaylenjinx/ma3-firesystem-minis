@@ -2,7 +2,7 @@
   FSBumps.lua  -  "FS Bumps": bump and strobe keys per group, like FireSystem's Bump page
   ------------------------------------------------------------------------
   One of the single-purpose FireSystem tools. Run it (click it in the Plugins pool) and it asks for
-  the groups (up to 8) and the pool numbers, then builds a layout with an ALL row and one row per group:
+  the groups (up to 20) and the pool numbers, then builds a layout with an ALL row and one row per group:
 
     [group] [Bump] [Steps] [Strobe] [Rnd]   [Dim] [Color] [Gobo] [Prism] [Iris] [Shutter] [Zoom] [Pos]
             [Edit Step] [Step Count] [Hold] [Master]   [Part] [Fade] [Delay] [Wings] [Out]
@@ -54,7 +54,13 @@ local PARTS = { {"All"}, {"Odd", 2, 1}, {"Even", 2, 2}, {"Left", 2, 1, true}, {"
 local OUTS = {0, 0.5, 1, 2}     -- release fades
 local HOLDS = {0.2, 0.5, 1, 2}  -- how long a Go+ step stays on before it releases itself
 local NSTEP = 3                 -- Go+ steps per group
-local STRIDE = 8                -- bump presets: step k of group gi = first + (k - 1) * 8 + gi - 1
+-- bump presets in blocks of 8 groups: in a block, step k of its group c (1-8) = block start +
+-- (k - 1) * 8 + c - 1; groups 9-16 take the next block. So groups 1-8 keep their numbers.
+local function bumpPre(first, gi, k)
+  local blk, c = math.floor((gi - 1) / 8), (gi - 1) % 8
+  return first + blk * 8 * NSTEP + ((k or 1) - 1) * 8 + c
+end
+local function preCount(nG) return math.ceil(math.max(nG, 1) / 8) * 8 * NSTEP end
 -- per row: the keys, the 8 look pickers, Part, Out, Edit Step, Step Count, Master, Hold, then the 3 step sequences (played by the Steps key, not on the layout)
 local J0 = #KEYS + #FAMS
 local J_PART, J_OUT = J0 + 1, J0 + 2
@@ -83,12 +89,13 @@ local function ask(E, nC)
   end
   local nSeq = (rows + 1) * (NPR + NMX)
   local pre = tonumber(gvar("preset") or "")
-  if not pre then pre = 911 while pre < 9970 and not (minePreset(E, pre) and minePreset(E, pre + NSTEP * STRIDE - 1)) do pre = pre + 1 end end
+  if not pre then pre = 911 while pre < 9970 and not (minePreset(E, pre) and minePreset(E, pre + preCount(rows) - 1)) do pre = pre + 1 end end
   local r = MessageBox({
     title = TITLE,
-    message = "Groups for the bump rows (up to 8), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
+    message = "Groups for the bump rows (up to 20), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
               "The numbers below are where the layout, its sequences, appearances, MAtricks and the bump presets\n" ..
-              string.format("(All pool, 3 steps per group) go: %d sequences, %d appearances, %d MAtricks.", nSeq, AP_N + nC, rows),
+              string.format("(All pool, 3 steps per group) go: %d sequences, %d appearances, %d MAtricks.\n", nSeq, AP_N + nC, rows) ..
+              "Speed / Rate master: the masters every key and step follows (0 = none).",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
@@ -97,13 +104,16 @@ local function ask(E, nC)
       {name = "First appearance", value = def("ap", "Appearance", AP_N + nC, 101), whiteFilter = "0123456789"},
       {name = "First MAtricks", value = def("mtx", "MAtricks", rows, 1), whiteFilter = "0123456789"},
       {name = "First bump preset (All pool 21)", value = tostring(pre), whiteFilter = "0123456789"},
+      {name = "Speed master", value = tostring(tonumber(gvar("speed") or "") or 4), whiteFilter = "0123456789"},
+      {name = "Rate master", value = tostring(tonumber(gvar("rate") or "") or 5), whiteFilter = "0123456789"},
     },
   })
   if not r or r.result ~= 1 then return nil end
   local i = r.inputs or {}
   local function n(k) return tonumber(i[k] or "") end
   return parseGroups(i["Groups"]), {L = n("Layout"), seq0 = n("First sequence"), ap0 = n("First appearance"),
-    mx0 = n("First MAtricks"), pre = n("First bump preset (All pool 21)")}
+    mx0 = n("First MAtricks"), pre = n("First bump preset (All pool 21)"),
+    speed = n("Speed master") or 0, rate = n("Rate master") or 0}
 end
 
 -- the presets: FS Presets' plan (made here when missing). Returns
@@ -179,7 +189,7 @@ local function groupSize(E, g)
 end
 
 -- a key: Sequence seq, cue 1 = recipe lines {{group or nil, "pool.no", MAtricks or nil, name = line name}, ...}
-local function keySeq(E, seq, label, lines, ap)
+local function keySeq(E, seq, label, lines, ap, m)
   if E.obj("Sequence " .. seq) then E.C("Delete Sequence %d /NC", seq) end
   E.C("ClearAll")
   E.C("Store Sequence %d Cue 1 /Overwrite", seq)
@@ -195,6 +205,9 @@ local function keySeq(E, seq, label, lines, ap)
   E.C("Label Sequence %d %s", seq, E.q(label))
   setProp(E, "Sequence " .. seq, "OffWhenOverridden", "Yes")
   E.C("Assign Appearance %d At Sequence %d", ap, seq)
+  -- the masters the key follows (o.speed / o.rate; 0 = none)
+  if m and (m.speed or 0) > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", m.speed) end
+  if m and (m.rate or 0) > 0 then E.trySeqMaster(seq, "RateMaster", "Speed", m.rate) end
 end
 
 local function buildBumps(E, groups, o)
@@ -214,7 +227,7 @@ local function buildBumps(E, groups, o)
   for k = ap0, ap0 + AP_N + nC - 1 do if not mine(E, "Appearance", k) then clash[#clash + 1] = "Appearance " .. k end end
   for k = mx0, mx0 + nG - 1 do if not mine(E, "MAtricks", k) then clash[#clash + 1] = "MAtricks " .. k end end
   for k = 1, NSTEP do for gi = 1, nG do
-    local no = pre0 + (k - 1) * STRIDE + gi - 1
+    local no = bumpPre(pre0, gi, k)
     if not minePreset(E, no) then clash[#clash + 1] = "Preset 21." .. no end
   end end
   if #clash > 0 then
@@ -241,7 +254,7 @@ local function buildBumps(E, groups, o)
     makeMatricks(E, bmx(gi), P .. names[gi] .. " Bump")
   end
   local function seqNo(b, j) return seq0 + b * NPR + (j - 1) end   -- b = 0: ALL
-  local function pre(gi, k) return pre0 + ((k or 1) - 1) * STRIDE + gi - 1 end
+  local function pre(gi, k) return bumpPre(pre0, gi, k) end
   local function stepSeq(gi, k) return seqNo(gi, J_STEP1 + k - 1) end
   local function V(k, gi) return VARP .. k .. gi end   -- a row's variable: FSBS_e1 (the edited step's preset)
   local function textCmd(idx, text)
@@ -280,7 +293,7 @@ local function buildBumps(E, groups, o)
   for gi, g in ipairs(groups) do
     for st = 1, NSTEP do
       local ss = stepSeq(gi, st)
-      keySeq(E, ss, P .. names[gi] .. " Step " .. st, {{g, "21." .. pre(gi, st), bmx(gi)}, masterLine()}, AP.key)
+      keySeq(E, ss, P .. names[gi] .. " Step " .. st, {{g, "21." .. pre(gi, st), bmx(gi)}, masterLine()}, AP.key, o)
       local others = {}
       for k = 1, NSTEP do if k ~= st then others[#others + 1] = "Off Sequence " .. stepSeq(gi, k) end end
       cueCmd(E, ss, 1, table.concat(others, "; "))
@@ -313,7 +326,7 @@ local function buildBumps(E, groups, o)
       -- wraps round; Step Count rewrites the cues). Steps All: one cue doing Go+ on every row's key,
       -- then switching itself off so the next press starts it again
       local sq = seqNo(b, j)
-      keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], {}, AP.key)
+      keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], {}, AP.key, o)
       if b == 0 then
         local l = {}
         for gi = 1, nG do l[#l + 1] = "Go+ Sequence " .. seqNo(gi, j) end
@@ -338,7 +351,7 @@ local function buildBumps(E, groups, o)
         missing[#missing + 1] = (b == 0 and "ALL" or names[b]) .. " " .. k[1]
         if E.obj("Sequence " .. sq) then E.C("Delete Sequence %d /NC", sq) end
       else
-        keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], lines, KEY_AP[k[2]])
+        keySeq(E, sq, P .. (b == 0 and "ALL" or names[b]) .. " " .. k[1], lines, KEY_AP[k[2]], o)
         place(E, L, "Sequence " .. sq, COL.keys + j - 1, b, b == 0 and (k[1] .. " All") or k[1], "Temp")
       end
      end
@@ -573,7 +586,7 @@ local function buildBumps(E, groups, o)
   end
   E.C("ClearAll")
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("ap", ap0)
-  svar("mtx", mx0) svar("preset", pre0)
+  svar("mtx", mx0) svar("preset", pre0) svar("speed", o.speed or 0) svar("rate", o.rate or 0)
   local lines = {string.format("Layout %d: ALL + %d group rows (Sequences %d-%d, Appearances %d-%d, MAtricks %d-%d, bump Presets 21.%d-%d).",
     L, nG, seq0, seq - 1, ap0, ap0 + AP_N + nC - 1, mx0, mx0 + nG - 1, pre0, pre(nG, NSTEP)),
     "Bump / Strobe / Rnd are Temp keys (on while held), Steps is Go+ (each press plays the next step):",
@@ -601,7 +614,7 @@ local function main(displayHandle, argument)
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (o.L and o.seq0 and o.ap0 and o.mx0 and o.pre) then
     return say("Fill in the layout, first sequence, appearance, MAtricks and bump preset numbers.")
   end
