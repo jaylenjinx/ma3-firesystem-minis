@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <GMA3 DataVersion="2.0.0.0">
-	<Plugin Name="FS Masters" Version="1.6.0" Author="FireSystem">
+	<Plugin Name="FS Masters" Version="1.7.0" Author="FireSystem">
 		<ComponentLua Name="FSMasters" FileName="FSMasters.lua" />
 	</Plugin>
 </GMA3>
