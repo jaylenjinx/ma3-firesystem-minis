@@ -42,6 +42,7 @@ local MODULES = {"Config", "Core", "Art", "Looks", "State", "Fire", "Bumps", "La
                  "Setup", "Views", "Home", "Timecode", "TCEditor", "Commands"}
 
 local G = _ENV
+local MAX_GROUPS = 20   -- groups a tool takes (8 by default: Groups 1-8 that exist)
 local env
 
 -- this plugin's own copy of the FireSystem modules (filled in by tools/make_tools.py)
@@ -10466,10 +10467,10 @@ local function ask(E, nBtn)
   end
   local r = MessageBox({
     title = TITLE,
-    message = "Groups for the picker rows (up to 8), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
+    message = "Groups for the picker rows (up to 20), e.g. 1 Thru 8 or 1,2,5. An ALL row goes on top.\n" ..
               "The numbers below are where the layout, its button sequences, macros and appearances go\n" ..
               string.format("(%d sequences per group row + %d for ALL, %d macros + 3 per group row, %d appearances,\n" ..
-                            "one MAtricks per group row).", nBtn + NMX, NMX, nBtn + 4, AP_N),
+                            "one MAtricks per group row). Speed master: the one the position FX follow (0 = none).", nBtn + NMX, NMX, nBtn + 4, AP_N),
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
@@ -10478,15 +10479,17 @@ local function ask(E, nBtn)
       {name = "First macro", value = def("macro", "Macro", nBtn + 4 * (rows + 1), 101), whiteFilter = "0123456789"},
       {name = "First appearance", value = def("ap", "Appearance", AP_N, 101), whiteFilter = "0123456789"},
       {name = "First MAtricks", value = def("mtx", "MAtricks", rows, 1), whiteFilter = "0123456789"},
+      {name = "Speed master", value = tostring(tonumber(gvar("speed") or "") or 2), whiteFilter = "0123456789"},
     },
   })
   if not r or r.result ~= 1 then return nil end
   local i = r.inputs or {}
   return parseGroups(i["Groups"]), tonumber(i["Layout"] or ""), tonumber(i["First sequence"] or ""),
-         tonumber(i["First macro"] or ""), tonumber(i["First appearance"] or ""), tonumber(i["First MAtricks"] or "")
+         tonumber(i["First macro"] or ""), tonumber(i["First appearance"] or ""), tonumber(i["First MAtricks"] or ""),
+         tonumber(i["Speed master"] or "") or 0
 end
 
-local function buildPicker(E, groups, L, seq0, M0, ap0, mx0)
+local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
   E.failures = {}
   E.CFG.GROUPS = groups
   local pans, tilts, fx, madeP, foreign = positionPresets(E)
@@ -10567,6 +10570,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0)
           {b.item.at[2], AP.fxOn, keep},
           {b.item.at[3], AP.fxOn, keep},
         }, mtx)
+        if speed > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", speed) end
       end
       place(E, L, "Sequence " .. seq, b.col, (b.base or 0) + gi, b.item.name, true)
       bySeq[bi] = bySeq[bi] or {}
@@ -10655,7 +10659,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0)
                       row = function(r) return r end, P = P, AP = AP, list = mxList("Fade"),
                       cueFade = function(row) return {posSeqs[row]} end})
   E.C("ClearAll")
-  svar("mtx", mx0)
+  svar("mtx", mx0) svar("speed", speed)
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("macro", M0) svar("ap", ap0)
   local lines = {string.format("Layout %d: ALL + %d group rows x (%d pans, %d tilts, %d FX) + Small / Mid / Big " ..
     "+ MAtricks (Sequences %d-%d, Macros %d-%d, Appearances %d-%d, MAtricks %d-%d).", L, #groups, #pans, #tilts, #fx,
@@ -10676,14 +10680,14 @@ local function main(displayHandle, argument)
   end
   local E = env
   -- (12 pans + 7 tilts + 8 FX: the count for the dialog; the build counts what it really finds)
-  local groups, L, seq0, M0, ap0, mx0 = ask(E, 27)
+  local groups, L, seq0, M0, ap0, mx0, speed = ask(E, 27)
   if not groups then return end
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (L and seq0 and M0 and ap0 and mx0) then return say("Fill in the layout, first sequence, macro, appearance and MAtricks numbers.") end
-  local ok, lines, err = pcall(buildPicker, E, good, L, seq0, M0, ap0, mx0)
+  local ok, lines, err = pcall(buildPicker, E, good, L, seq0, M0, ap0, mx0, speed)
   pcall(Cmd, "ClearAll")
   if not ok then return say("Stopped: " .. tostring(lines)) end
   if not lines then return say(err) end
