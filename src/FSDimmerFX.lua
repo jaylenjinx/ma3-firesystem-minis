@@ -33,7 +33,7 @@ local VARP = "FSDF_"   -- this tool's global variables
 
 local LEVELS = {"0%", "50%", "100%"}   -- FS Presets' Dimmer pool labels
 local AP_N = 6                         -- appearances: level off / on, FX off / on, MAtricks idle / lit
-local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Fade", "Delay")
+local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Fade", "Delay", "Speed")
 
 -- the buttons: FS Presets' plan gives the preset numbers (made here when missing)
 local function dimmerPresets(E)
@@ -135,7 +135,7 @@ local function buildPicker(E, groups, o)
   pcall(function() local lh = E.obj("Layout " .. L) for i = lh:Count(), 1, -1 do lh:Delete(i) end end)
   E.C("Label Layout %d %s", L, E.q(P .. "Dimmer FX"))
   for gi = 1, #groups do makeMatricks(E, mx0 + gi - 1, P .. names[gi]) end
-  local seq, bySeq = seq0, {}
+  local seq, bySeq, rowFx = seq0, {}, {}
   for gi, g in ipairs(groups) do
     local rowSeq0 = seq
     local mtx = mx0 + gi - 1
@@ -149,6 +149,7 @@ local function buildPicker(E, groups, o)
       buttonSeq(E, seq, P .. names[gi] .. " " .. b.item.name, g, lvl and AP.lvlOff or AP.fxOff,
                 {{b.item.at, lvl and AP.lvlOn or AP.fxOn, off}}, mtx)
       if not lvl and o.speed > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", o.speed) end
+      if not lvl then rowFx[gi] = rowFx[gi] or {} table.insert(rowFx[gi], {seq, 1}) end
       place(E, L, "Sequence " .. seq, b.col, gi, b.item.name, true)
       bySeq[bi] = bySeq[bi] or {}
       table.insert(bySeq[bi], seq)
@@ -166,7 +167,8 @@ local function buildPicker(E, groups, o)
   end
   -- the MAtricks buttons (lib picker) at the end of each row
   seq = mxButtons(E, {L = L, n = #groups, names = names, mx0 = mx0, seq0 = seq, col = mxCol,
-                      row = function(r) return r end, P = P, AP = AP, list = MXL})
+                      row = function(r) return r end, P = P, AP = AP, list = MXL,
+                      rate = function(r) return rowFx[r] or {} end})
   E.C("ClearAll")
   svar("mtx", mx0) svar("speed", o.speed)
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("macro", M0) svar("ap", ap0)

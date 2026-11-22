@@ -176,8 +176,8 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <p class="file">FSPositionPicker.xml</p>
       <figure><img src="img/FSPositionPicker.png" alt="Position picker layout: pan and tilt rows on top, position FX rows below with sizes and MAtricks" loading="lazy"><figcaption>Pans and tilts on top, position FX below.</figcaption></figure>
       <ul class="points">
-        <li>12 pans and 7 tilts per group, with a position fade per row.</li>
-        <li>8 position FX with Small / Mid / Big and an FX Off button. They follow a speed master (Speed 2 by default).</li>
+        <li>12 pans and 15 tilts (-90 to Flat) per group, with a position fade per row.</li>
+        <li>8 position FX with Small / Mid / Big and an FX Off button. They follow a speed master (Speed 2 by default), times each row's Speed button (x1 to x4, 1/4, 1/2).</li>
         <li>MAtricks per row: Wings, Sym, Groups, Blocks, Phase, Fade, Delay.</li>
       </ul>
     </section>
@@ -189,7 +189,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <ul class="points">
         <li>0 %, 50 %, 100 %, then Sine, Square, Ramp Up and Ramp Down at 1, 3 and 4.</li>
         <li>One dimmer look per group at a time.</li>
-        <li>The chases follow a speed master (Speed 1 by default).</li>
+        <li>The chases follow a speed master (Speed 1 by default). Each row's Speed button multiplies it: x1, x2, x4, 1/4, 1/2.</li>
       </ul>
     </section>
 
@@ -200,7 +200,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <ul class="points">
         <li>Forms: Sine, Ramp Down, Ramp Up, Square, and Heart (a fixed rainbow).</li>
         <li>2 to 5 steps; each STEP is a Goto list of 15 colours in Normal, Pastel and Dark.</li>
-        <li>Follows a speed master (Speed 3 by default). A form tap only starts it; Off stops it, and the step count or a STEP pick never brings it back.</li>
+        <li>Follows a speed master (Speed 3 by default), times each row's Speed button (x1 to x4, 1/4, 1/2). A form tap only starts it; Off stops it, and the step count or a STEP pick never brings it back.</li>
       </ul>
     </section>
 
@@ -238,7 +238,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>A Live Output System built the way grandMA3's StartShow does it, with 1 to 4 banks.</li>
         <li>Toggle groups in, pick a look, then hit a bump: All &gt;, All &lt;, Odd, Even, 1/3, 2/3, 3/3 or Chase.</li>
         <li>Dim, Gobo, Prism, Iris, Shutter, Zoom and Position are Goto lists: a tap opens every option (Dim 0-100 %, each gobo, prism and shutter slot of your fixtures). The 15 colours are one button each.</li>
-        <li>Fade, Wings, Delay and Off time per bank. Change a look while a bump plays and it follows.</li>
+        <li>Fade, Wings, Blocks, Delay and Off time per bank. Change a look while a bump plays and it follows.</li>
         <li>The bumps follow Speed master 4 and Rate master 5, like FS Bumps.</li>
       </ul>
     </section>

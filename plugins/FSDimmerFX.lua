@@ -9948,6 +9948,9 @@ local function poolOf(lines, orig)
   end
   return found or (orig ~= ALL_POOL and orig) or ALL_POOL
 end
+-- tilts on top of FireSystem's 7 (Back -20, Down 0, 15, 30, 45, 60, Flat 90), in degrees: numbered
+-- after them in the Position pool, so the presets before keep their numbers (Lyn 2026-11-22)
+local EXTRA_TILTS = {-90, -60, -45, -30, -10, 10, 20, 75}
 local FAM_ORDER = {dim = 1, pos = 2, pfx = 3, col = 4, zoom = 5, gobo = 6, strobe = 7, rot = 8, beam = 9}
 
 -- plan: every preset the FireSystem code would make (all families, so a preset's number doesn't
@@ -9995,6 +9998,16 @@ local function plan(E, coloursOnly)
   end)
   E.storePreset = store
   if not ok then error(err, 0) end
+  -- the extra tilts, made like FireSystem's own (its "Tilt 15" preset with the angle changed)
+  local tmpl
+  for _, r in ipairs(recs) do if r.pool == 2 and r.label == "Tilt 15" then tmpl = r end end
+  if tmpl then
+    for _, v in ipairs(EXTRA_TILTS) do
+      local l = {}
+      for i, x in ipairs(tmpl.lines) do l[i] = (tostring(x):gsub(" At 15$", " At " .. v)) end
+      recs[#recs + 1] = {fam = "pos", pool = 2, label = "Tilt " .. v, lines = l}
+    end
+  end
   -- Focus 0-100 % in steps of 10 (Focus pool 6, next to the zoom steps)
   for v = 0, 100, 10 do
     recs[#recs + 1] = {fam = "zoom", pool = 6, label = "Focus " .. v .. "%", lines = {string.format('?Attribute "Focus1" At %d', v)}}
@@ -10308,15 +10321,20 @@ local MX = {
   {"Phase",  {"Off", 90, 180, 360}},
   {"Fade",   {"Off", 1, 3, 5}},
   {"Delay",  {"Off", 1, 2, 4}},
+  -- the row's FX speed multiplier: MA's Speed Scale on the cues of its FX buttons (as FireSystem's
+  -- Rate), so the FX run at that multiple of their speed master. Needs o.rate in mxButtons
+  {"Speed",  {"x1", "x2", "x4", "1/4", "1/2"}},
 }
+local SPEED_SCALE = {x1 = "One", x2 = "Mul2", x4 = "Mul4", ["1/4"] = "Div4", ["1/2"] = "Div2"}
 local function mxText(f, v)
   local n = MX[f][1]
-  if v == "Off" or v == "On" then return n .. " " .. v end
+  if v == "Off" or v == "On" or n == "Speed" then return n .. " " .. v end
   return n .. " " .. v .. ((n == "Fade" or n == "Delay") and "s" or "")
 end
 -- the MAtricks properties for setting f at value v (X axis)
 local function mxProps(f, v)
   local n, on = MX[f][1], v ~= "Off"
+  if n == "Speed" then return {} end   -- (not a MAtricks setting)
   local function val(x) return on and tostring(x) or "None" end
   if n == "Wings" then return {{"XWings", val(v)}} end
   if n == "Sym" then return {{"PhaserTransform", on and "Mirror" or "None"}} end
@@ -10336,7 +10354,7 @@ local function makeMatricks(E, no, label)
   E.C("ClearAll")
   E.Cany({ string.format("Store MAtricks %d /Overwrite", no), string.format("Store MAtricks %d", no) })
   E.C("Label MAtricks %d %s", no, E.q(label))
-  for f = 1, #MX do E.C("%s", mxSetCmd(E, no, f, "Off")) end
+  for f = 1, #MX do if #mxProps(f, "Off") > 0 then E.C("%s", mxSetCmd(E, no, f, "Off")) end end
 end
 
 
@@ -10353,7 +10371,8 @@ end
 -- each cue sets the row's MAtricks object (o.mx0 + row - 1) and the button's text. ALL: each cue
 -- sends every row's button to that value. o = {L, n, names, mx0, seq0, col, row = function(r)
 -- (r = 0 for ALL) -> layout row, P = name prefix, AP = {idle, lit}, list = MX indices,
--- vals = {MX name = {values}}: optional, instead of MX's own values}.
+-- vals = {MX name = {values}}: optional, instead of MX's own values,
+-- rate = function(row) -> {{seq, cues}, ...}: the row's FX sequences, for the Speed button}.
 -- Returns the next free sequence number.
 local function mxButtons(E, o)
   local L, n, list = o.L, o.n, o.list
@@ -10372,7 +10391,8 @@ local function mxButtons(E, o)
       local steps = {}
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do steps[k] = {mxText(f, v), k == 1 and o.AP.idle or o.AP.lit} end
       cycleSeq(E, sq, o.P .. (all and "ALL" or o.names[row]) .. " " .. name, steps)
-      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, "Off"))
+      local vals = (o.vals and o.vals[name]) or MX[f][2]
+      local idx = place(E, L, "Sequence " .. sq, o.col + j - 1, o.row(all and 0 or row), mxText(f, vals[1]))
       for k, v in ipairs((o.vals and o.vals[name]) or MX[f][2]) do
         local cmd = {}
         if all then
@@ -10381,6 +10401,12 @@ local function mxButtons(E, o)
           -- a cue fade on the row's buttons (cue 1), not the MAtricks fade
           for _, rg in ipairs(o.cueFade(row)) do
             cmd[#cmd + 1] = string.format('Set Sequence %s Cue 1 Property "CueInFade" %s', rg, v == "Off" and "0" or tostring(v))
+          end
+        elseif name == "Speed" then
+          -- the speed scale of every cue of the row's FX buttons
+          for _, s in ipairs(o.rate and o.rate(row) or {}) do
+            cmd[#cmd + 1] = string.format('Set Sequence %d Cue %s Part 0 Property "SpeedScale" "%s"', s[1],
+              s[2] > 1 and ("1 Thru " .. s[2]) or "1", SPEED_SCALE[v] or "One")
           end
         elseif name == "Sym" then
           -- the row's mirror command is kept in a variable: Wings sends it again after each change,
@@ -10421,7 +10447,7 @@ end
 
 local LEVELS = {"0%", "50%", "100%"}   -- FS Presets' Dimmer pool labels
 local AP_N = 6                         -- appearances: level off / on, FX off / on, MAtricks idle / lit
-local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Fade", "Delay")
+local MXL = mxList("Wings", "Groups", "Blocks", "Phase", "Fade", "Delay", "Speed")
 
 -- the buttons: FS Presets' plan gives the preset numbers (made here when missing)
 local function dimmerPresets(E)
@@ -10523,7 +10549,7 @@ local function buildPicker(E, groups, o)
   pcall(function() local lh = E.obj("Layout " .. L) for i = lh:Count(), 1, -1 do lh:Delete(i) end end)
   E.C("Label Layout %d %s", L, E.q(P .. "Dimmer FX"))
   for gi = 1, #groups do makeMatricks(E, mx0 + gi - 1, P .. names[gi]) end
-  local seq, bySeq = seq0, {}
+  local seq, bySeq, rowFx = seq0, {}, {}
   for gi, g in ipairs(groups) do
     local rowSeq0 = seq
     local mtx = mx0 + gi - 1
@@ -10537,6 +10563,7 @@ local function buildPicker(E, groups, o)
       buttonSeq(E, seq, P .. names[gi] .. " " .. b.item.name, g, lvl and AP.lvlOff or AP.fxOff,
                 {{b.item.at, lvl and AP.lvlOn or AP.fxOn, off}}, mtx)
       if not lvl and o.speed > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", o.speed) end
+      if not lvl then rowFx[gi] = rowFx[gi] or {} table.insert(rowFx[gi], {seq, 1}) end
       place(E, L, "Sequence " .. seq, b.col, gi, b.item.name, true)
       bySeq[bi] = bySeq[bi] or {}
       table.insert(bySeq[bi], seq)
@@ -10554,7 +10581,8 @@ local function buildPicker(E, groups, o)
   end
   -- the MAtricks buttons (lib picker) at the end of each row
   seq = mxButtons(E, {L = L, n = #groups, names = names, mx0 = mx0, seq0 = seq, col = mxCol,
-                      row = function(r) return r end, P = P, AP = AP, list = MXL})
+                      row = function(r) return r end, P = P, AP = AP, list = MXL,
+                      rate = function(r) return rowFx[r] or {} end})
   E.C("ClearAll")
   svar("mtx", mx0) svar("speed", o.speed)
   svar("groups", E.rangeList({table.unpack(groups)})) svar("layout", L) svar("seq", seq0) svar("macro", M0) svar("ap", ap0)
