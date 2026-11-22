@@ -129,7 +129,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <li>Download a release. Each tool is one <code>.xml</code> and one <code>.lua</code>; the zip has them all.</li>
       <li>Copy the tools you want into <code>gma3_library/datapools/plugins/</code>. On onPC that's <code>~/MALightingTechnology/gma3_library/datapools/plugins/</code>; on a console, a USB stick with the same folders.</li>
       <li>Import each tool's XML into the Plugins pool, e.g. <code>FSColourPicker.xml</code>.</li>
-      <li>Click the tool once. It asks for the groups (up to 8) and where things go, then builds.</li>
+      <li>Click the tool once. It asks for the groups (Groups 1-8 by default, up to 20) and where things go, then builds.</li>
     </ol>
     <p class="note">Made for grandMA3 2.4 and newer. When you update a tool, import it again in the Plugins pool: ReloadAllPlugins doesn't pick up new files.</p>
 
@@ -177,7 +177,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <figure><img src="img/FSPositionPicker.png" alt="Position picker layout: pan and tilt rows on top, position FX rows below with sizes and MAtricks" loading="lazy"><figcaption>Pans and tilts on top, position FX below.</figcaption></figure>
       <ul class="points">
         <li>12 pans and 7 tilts per group, with a position fade per row.</li>
-        <li>8 position FX with Small / Mid / Big and an FX Off button.</li>
+        <li>8 position FX with Small / Mid / Big and an FX Off button. They follow a speed master (Speed 2 by default).</li>
         <li>MAtricks per row: Wings, Sym, Groups, Blocks, Phase, Fade, Delay.</li>
       </ul>
     </section>
@@ -200,7 +200,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <ul class="points">
         <li>Forms: Sine, Ramp Down, Ramp Up, Square, and Heart (a fixed rainbow).</li>
         <li>2 to 5 steps; each STEP is a Goto list of 15 colours in Normal, Pastel and Dark.</li>
-        <li>Follows a speed master (Speed 3 by default).</li>
+        <li>Follows a speed master (Speed 3 by default). A form tap only starts it; Off stops it, and the step count or a STEP pick never brings it back.</li>
       </ul>
     </section>
 
@@ -225,6 +225,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li><b>Master:</b> puts a group you pick, such as the main fixtures of pixel cells, at Full with the bump and its steps.</li>
         <li><b>Bump look:</b> each group's own preset, one line per look. Dim, Color, Gobo, Prism, Iris, Shutter, Zoom and Pos are Goto lists, and a change plays straight away, even mid-bump.</li>
         <li><b>Part:</b> All, Odd, Even, Left, Right or a third of the group. <b>Fade</b> in, <b>Delay</b> and <b>Wings</b> spread it, <b>Out</b> is the release fade.</li>
+        <li><b>Masters:</b> every key and step follows Speed master 4 and Rate master 5, as in FireSystem.</li>
         <li><b>Strobe / Rnd:</b> Full plus the group's strobe or random strobe from its fixture profile (LED fixtures get a dimmer chase).</li>
       </ul>
     </section>
@@ -238,6 +239,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>Toggle groups in, pick a look, then hit a bump: All &gt;, All &lt;, Odd, Even, 1/3, 2/3, 3/3 or Chase.</li>
         <li>Dim, Gobo, Prism, Iris, Shutter, Zoom and Position are Goto lists: a tap opens every option (Dim 0-100 %, each gobo, prism and shutter slot of your fixtures). The 15 colours are one button each.</li>
         <li>Fade, Wings, Delay and Off time per bank. Change a look while a bump plays and it follows.</li>
+        <li>The bumps follow Speed master 4 and Rate master 5, like FS Bumps.</li>
       </ul>
     </section>
 
@@ -245,7 +247,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <h2>FS Masters</h2>
       <p class="file">FSMasters.xml</p>
       <ul class="points">
-        <li>Fills an executor page the way FireSystem&#39;s page 1 is laid out, with columns 1 to 8 for the groups.</li>
+        <li>Fills an executor page the way FireSystem&#39;s page 1 is laid out, with columns 1 to 8 for the groups. Groups 9&ndash;16 go on the next page and 17&ndash;20 on the one after.</li>
         <li>401&ndash;408 Rnd strobe, 301&ndash;308 Strobe (Flash), 201&ndash;208 group faders, 101&ndash;108 Bump (Temp), 110 Strobe All. The keys are FS Bumps&#39; own, so run FS Bumps first.</li>
         <li>The X-keys 191&ndash;198 play FS LOS bank 1&#39;s 8 bumps (Temp); bank 2 goes on the next page&#39;s X-keys, and so on. Run FS LOS first.</li>
         <li>Speed masters 1&ndash;5 on 210, 209, 409, 410 and 211, and playback masters 1 and 2 on 209 and 210 of the next page, named as in FireSystem.</li>

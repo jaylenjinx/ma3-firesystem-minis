@@ -35,6 +35,7 @@ local MODULES = {"Config", "Core", "Art", "Looks", "State", "Fire", "Bumps", "La
                  "Setup", "Views", "Home", "Timecode", "TCEditor", "Commands"}
 
 local G = _ENV
+local MAX_GROUPS = 20   -- groups a tool takes (8 by default: Groups 1-8 that exist)
 local env
 
 -- this plugin's own copy of the FireSystem modules (filled in by tools/make_tools.py)
@@ -10174,7 +10175,7 @@ local function ask(E)
   states[#states + 1] = {name = "Remake existing presets", state = GetVar(GlobalVars(), "FSP_force") ~= "0"}
   local r = MessageBox({
     title = TITLE,
-    message = "Groups to build the presets for (up to 8), e.g. 1 Thru 8 or 1,2,5.\n" ..
+    message = "Groups to build the presets for (up to 20), e.g. 1 Thru 8 or 1,2,5.\n" ..
               "Presets start at 1 in each pool: phasers go in the All pool, the rest in\n" ..
               "their own pool (Dimmer, Position, Gobo, Color, Beam, Focus).",
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
@@ -10210,7 +10211,7 @@ local function main(displayHandle, argument)
     if E.obj("Group " .. g) then good[#good + 1] = g end
   end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
-  if #good > 8 then return say("Pick up to 8 groups.") end
+  if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   SetVar(GlobalVars(), "FSP_groups", E.rangeList({table.unpack(good)}))
   want.rot = want.gobo  -- (gobo / prism spin goes with the gobos)
   local made, foreign, kept = buildPresets(E, good, want, force)
