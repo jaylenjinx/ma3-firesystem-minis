@@ -74,7 +74,7 @@ test("Keep look: same colours, the square icon on top, text kept", function()
   run(stub, true)
   local n = stub.ap[s]
   t.ok(apName(stub, s):find("^FS IC sine1 "), apName(stub, s))
-  t.ok(n >= 3001, "appearance " .. n)
+  t.ok(n >= 9501, "appearance " .. n)
   t.eq(stub.rgb[n], before)
   t.eq(element(stub, s).CustomTextText, beforeText)
   t.ok(stub.objects["Image 3.216"], "sine1 image not imported")
@@ -113,12 +113,12 @@ test("someone else's appearance in a disc slot is left alone, and that button ke
   t.ok(msg:find("kept their text"), msg)
 end)
 
-test("images that can't be imported: says so, buttons untouched", function()
+test("when no image can be imported: says so, buttons untouched", function()
   local stub = built("FSDimmerFX", false)
   local s = seqNamed(stub, "FS DF Front Sine 1")
   local text = element(stub, s).CustomTextText
   local msg = run(stub)
-  t.ok(msg:find("No icon images could be imported"), msg)
+  t.ok(msg:find("No icon images could be imported", 1, true), msg)
   t.eq(element(stub, s).CustomTextText, text)
 end)
 
@@ -141,90 +141,98 @@ test("after every tool in one show: no errors, every tool's layout gets icons", 
   t.ok(n and tonumber(layouts) >= 5, msg)
 end)
 
--- ---- the mini tools' own icons (MINI in src/FSIcons.lua, drawn by tools/make_mini_icons.py) ----
+-- the buttons FireSystem has no icon for: this tool's own
+local function all()
+  local stub = ma.new()
+  stub.objects["Group 1"], stub.objects["Group 2"] = "Front", "Back"
+  stub.images = true
+  for _, tool in ipairs({"FSPresets", "FSDimmerFX", "FSColourFX", "FSColourPicker", "FSPositionPicker", "FSBumps", "FSGoboBeam", "FSLOS"}) do
+    local main = assert(loadfile("plugins/" .. tool .. ".lua", "t", stub.G))(tool, {}, nil)
+    main(nil, "")
+  end
+  return stub
+end
 local function named(stub, kind, label)
   for p, v in pairs(stub.objects) do if v == label and p:match("^" .. kind .. " %d+$") then return p end end
 end
 
-test("mini icons: an extra tilt gets its own disc (Image 3.3101+), dark off and lit on, text gone", function()
-  local stub = built("FSPositionPicker")
-  local s = named(stub, "Sequence", "FS PP Front Tilt -45")
-  t.ok(s, "no Tilt -45 button")
+test("own discs: extra tilts, sizes, LOS bumps, swatches, tints, step counts, Master, Focus", function()
+  local stub = all()
   run(stub)
-  t.eq(apName(stub, s), "FS r mi_tilt_m45 idle")
-  t.eq(apName(stub, s .. " Cue 1"), "FS r mi_tilt_m45 on")
-  t.eq(element(stub, s).CustomTextText, "")
-  t.ok(stub.objects["Image 3." .. (3101 + 18 * 3)], "tilt_m45 idle disc not imported")
-  t.eq(stub.ap[s], 9101 + 18 * 3)
-  t.eq(apName(stub, named(stub, "Macro", "FS PP ALL Tilt -45")), "FS r mi_tilt_m45 on")
-  t.eq(apName(stub, named(stub, "Macro", "FS PP ALL FX Big")), "FS r mi_fx_big on")
+  local want = {
+    {"Sequence", "FS PP Front Tilt -90", "FS ic m_tilt_m90_i"},
+    {"Sequence", "FS PP Front Tilt 75", "FS ic m_tilt_75_i"},
+    {"Sequence", "FS LO LOS1 All >", "FS ic m_los_right_i"},
+    {"Sequence", "FS LO LOS1 Chase", "FS ic m_los_chase_i"},
+    {"Sequence", "FS BS Front Steps", "FS ic m_steps_i"},
+  }
+  for _, w in ipairs(want) do
+    local p = named(stub, w[1], w[2])
+    t.ok(p, "no " .. w[2])
+    t.eq(apName(stub, p), w[3], w[2])
+    t.ok(stub.ap[p .. " Cue 1"] == nil or (apName(stub, p .. " Cue 1") or ""):find("_o$"), w[2] .. " cue not lit")
+  end
+  -- a swatch: Red's dark disc off, its bright one on
+  local red
+  for p, v in pairs(stub.objects) do if p:match("^Sequence %d+$") and type(v) == "string" and v:find("^FS CP Front ") and v:find(" Red$") then red = p end end
+  t.ok(red, "no Red button")
+  t.eq(apName(stub, red), "FS ic sw_red_i")
+  -- the images are this tool's, from Image 3.3101 on
+  t.ok(stub.objects["Image 3.3101"] or stub.objects["Image 3.3102"], "no own images imported")
 end)
 
-test("mini icons: a value button gets the small icon on top and keeps its text, at the bottom", function()
-  local stub = built("FSDimmerFX")
-  local s = named(stub, "Sequence", "FS DF Front Fade")
-  local text = element(stub, s).CustomTextText
-  t.ok(text and text ~= "", "Fade has no text")
+test("value buttons keep their text, at the bottom, with a top icon in their own colours", function()
+  local stub = all()
   run(stub)
-  t.eq(apName(stub, s), "FS r mi_fade idle")
-  t.eq(element(stub, s).CustomTextText, text)
-  t.eq(element(stub, s).CustomTextAlignmentV, "Bottom")
-end)
-
-test("mini icons: LOS bumps get theirs; its inputs and resets keep their text (Off isn't the power icon)", function()
-  local stub = built("FSLOS")
-  run(stub)
-  t.eq(apName(stub, named(stub, "Sequence", "FS LO LOS1 All >")), "FS r mi_all_right idle")
-  t.eq(apName(stub, named(stub, "Sequence", "FS LO LOS1 Chase")), "FS r mi_chase idle")
-  local off0, offIn = named(stub, "Macro", "FS LO LOS1 Off 0"), named(stub, "Macro", "FS LO LOS1 Off input")
-  t.eq(apName(stub, off0), "FS r mi_out idle")
-  t.eq(element(stub, off0).CustomTextText, "Off 0")
-  t.eq(apName(stub, offIn), "FS r mi_out idle")
-  t.eq(element(stub, offIn).CustomTextText, "Off")
-end)
-
-test("mini icons: colour swatches and group buttons are left alone", function()
-  local stub = built("FSColourPicker")
-  run(stub)
-  local red = named(stub, "Sequence", "FS CP Front Red")
-  t.ok(red, "no Red swatch")
-  t.ok(not (apName(stub, red) or ""):find("^FS r "), apName(stub, red))
-  t.eq(apName(stub, named(stub, "Macro", "FS CP Front Pastel")), "FS r mi_pastel on")
-end)
-
-test("mini icons, Keep look: the square icon (Image 3.3501+) in the button's own colour", function()
-  local stub = built("FSPositionPicker")
-  local s = named(stub, "Sequence", "FS PP Front Tilt -45")
-  local before = stub.rgb[stub.ap[s]]
-  run(stub, true)
-  t.ok(apName(stub, s):find("^FS IC mi_tilt_m45 "), apName(stub, s))
-  t.eq(stub.rgb[stub.ap[s]], before)
-  t.ok(stub.objects["Image 3." .. (3501 + 18)], "square tilt_m45 not imported")
-end)
-
-test("one file: FS Icons carries FireSystem's images and every mini icon", function()
-  local stub = ma.load("FSIcons")
-  local main = assert(loadfile("plugins/FSIcons.lua", "t", stub.G))("FSIcons", {}, nil)
-  local data, mini = ma.find(main, "ICON_DATA"), ma.find(main, "MINI")
-  t.ok(type(data) == "function", "no ICON_DATA")
-  local D = data()
-  t.ok(D["fs_r_sine1_i.png"] and D["fs_sine1.png"], "FireSystem's images missing")
-  for _, m in ipairs(mini) do
-    for _, f in ipairs({"fs_mi_%s.png", "fs_r_mi_%s_i.png", "fs_r_mi_%s_o.png", "fs_r_mi_%s_p.png"}) do
-      local k = f:format(m[1])
-      t.ok(type(D[k]) == "string" and #D[k] > 100, k .. " missing")
+  local found = {}
+  for p, v in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        local a = e.what and stub.ap[e.what] and stub.objects["Appearance " .. stub.ap[e.what]]
+        if type(a) == "string" and a:find("^FS IC t:") then
+          t.eq(e.CustomTextAlignmentV, "Bottom", e.what)
+          t.ok(e.CustomTextText and e.CustomTextText ~= "", e.what .. " lost its text")
+          found[a:match("^FS IC t:(%S+)")] = true
+        end
+      end
     end
+  end
+  for _, k in ipairs({"wings", "fade", "delay", "speed", "phase", "group", "block", "offtime", "hold", "fadeout", "edit", "stepcount", "step1", "sym", "part"}) do
+    t.ok(found[k], "no " .. k .. " top icon")
   end
 end)
 
-test("mini icons: a picker's Off cue gets the dark disc, its values the lit one; Bumps' Color is left alone", function()
-  local stub = built("FSGoboBeam")
+test("only group buttons (and FS LOS's group toggles) are left with plain text", function()
+  local stub = all()
   run(stub)
-  local s = named(stub, "Sequence", "FS GB Front Frost")
-  t.eq(stub.cueNames[s .. " Cue 1"], "Off")
-  t.eq(apName(stub, s .. " Cue 1"), "FS r mi_frost idle")
-  t.eq(apName(stub, s .. " Cue 2"), "FS r mi_frost on")
-  local bs = built("FSBumps")
-  run(bs)
-  t.ok(not (apName(bs, named(bs, "Sequence", "FS BS Front Color")) or ""):find("^FS r "), "Color got a disc")
+  local plain = {}
+  for p, v in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        local a = e.what and stub.ap[e.what] and stub.objects["Appearance " .. stub.ap[e.what]]
+        local iconed = type(a) == "string" and (a:find("^FS IC ") or a:find("^FS ic ") or a:find("^FS r ") or a:find("^FS n "))
+        if e.what and not e.what:match("^Group") and not iconed then plain[#plain + 1] = (e.CustomTextText or "?") end
+      end
+    end
+  end
+  for _, txt in ipairs(plain) do t.ok(txt == "Front" or txt == "Back", "still plain: " .. txt) end
+end)
+
+test("a picker's Off step shows the dark disc, its other steps the lit one", function()
+  local stub = all()
+  run(stub)
+  local checked = 0
+  for p, v in pairs(stub.objects) do
+    local sq = p:match("^(Sequence %d+) Cue %d+$")
+    if sq and v == "Off" and type(stub.objects[sq]) == "string" and stub.objects[sq]:find("^FS GB ") then
+      local a = apName(stub, p) or ""
+      if a:find("^FS r ") then
+        t.ok(a:find(" idle$"), p .. " (Off) got " .. a)
+        local other = apName(stub, sq .. " Cue 2") or ""
+        t.ok(other == "" or other:find(" on$"), sq .. " Cue 2 got " .. other)
+        checked = checked + 1
+      end
+    end
+  end
+  t.ok(checked > 0, "no Gobo Beam picker with an Off step got a disc")
 end)

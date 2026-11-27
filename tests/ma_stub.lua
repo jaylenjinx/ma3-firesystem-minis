@@ -4,14 +4,13 @@
 -- through ma_stub.load("FSPresets"), which runs plugins/FSPresets.lua the way MA does.
 -- stub.objects["Group 1"] = true makes ObjectList find that object (nothing exists otherwise);
 -- a string value is the object's name (stub.objects["Layout 1"] = "FS CP Layout" is a tool's own),
--- and ObjectList('Sequence "name"') finds it by that name. stub.lines["Macro 101"] lists a macro's
--- line commands.
+-- and ObjectList('Sequence "name"') finds it by that name.
 local M = {}
 
 local function nothing() return nil end
 
 function M.new()
-  local stub = {cmds = {}, messages = {}, vars = {}, objects = {}, lines = {}}
+  local stub = {cmds = {}, messages = {}, vars = {}, objects = {}}
   local G = {}
   for k, v in pairs(_G) do G[k] = v end
   G._G = G
@@ -49,8 +48,6 @@ function M.new()
   -- (an object's appearance: stub.ap["Sequence 5 Cue 1"] = 3001, set by Assign Appearance;
   -- an appearance's colour: stub.rgb[3001] = {r, g, b}, set by its BackR / BackG / BackB)
   stub.ap, stub.rgb = {}, {}
-  -- (a cue's name: stub.cueNames["Sequence 5 Cue 1"] = "Off", set by Label Sequence 5 Cue 1 "Off")
-  stub.cueNames = {}
   local handle
   function handle(path)
     local o = stub.objects[path]
@@ -61,28 +58,10 @@ function M.new()
       h.Count = function(self) return #self.elements end
       h.Delete = function(self, i) table.remove(self.elements, i) end
       h.Children = function(self) return self.elements end
-      -- a macro's lines: Append gives a line whose Set("Command", c) is kept in stub.lines[path]
-      h.Append = function(self)
-        local ln = {}
-        ln.Set = function(me, k, v)
-          me[k] = v
-          if k == "Command" then
-            stub.lines[path] = stub.lines[path] or {}
-            local list = {}
-            for _, e in ipairs(self.elements) do list[#list + 1] = e.Command end
-            stub.lines[path] = list
-          end
-        end
-        self.elements[#self.elements + 1] = ln
-        return ln
-      end
       h.GetClass = function() return path:match("^(%a+)") end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
-        if k == "name" or k == "Name" then
-          local v = stub.objects[path]
-          return type(v) == "string" and v or stub.cueNames[path] or path
-        end
+        if k == "name" or k == "Name" then local v = stub.objects[path] return type(v) == "string" and v or path end
         if k == "no" or k == "No" then return tonumber(path:match("(%d+)$")) end
         if k == "Appearance" then return stub.ap[path] and handle("Appearance " .. stub.ap[path]) end
         local rgb = stub.rgb[tonumber(path:match("^Appearance (%d+)$"))]
@@ -120,13 +99,13 @@ function M.new()
     local kind, no = c:match("^Store (%a+) ([%d.]+)")
     if kind and not stub.objects[kind .. " " .. no] then stub.objects[kind .. " " .. no] = true end
     local sq, cue = c:match("^Store Sequence (%d+) Cue (%d+)")
-    if sq then stub.objects["Sequence " .. sq .. " Cue " .. cue] = true end
+    if sq then stub.objects["Sequence " .. sq .. " Cue " .. cue] = stub.objects["Sequence " .. sq .. " Cue " .. cue] or true end
+    local lsq, lcue, cname = c:match('^Label Sequence (%d+) Cue (%d+) "(.*)"$')
+    if lsq then stub.objects["Sequence " .. lsq .. " Cue " .. lcue] = cname end
     local apn, at = c:match("^Assign Appearance (%d+) At (.-)$")
     if apn then stub.ap[at] = tonumber(apn) end
     local rn, r, g, b = c:match('^Set Appearance (%d+) Property "BackR" (%d+) "BackG" (%d+) "BackB" (%d+)')
     if rn then stub.rgb[tonumber(rn)] = {tonumber(r), tonumber(g), tonumber(b)} end
-    local lsq, lcue, lname = c:match('^Label Sequence (%d+) Cue (%d+) "(.*)"$')
-    if lsq then stub.cueNames["Sequence " .. lsq .. " Cue " .. lcue] = lname end
     local lk, lno, name = c:match('^Label (%a+) ([%d.]+) "(.*)"$')
     if lk then stub.objects[lk .. " " .. lno] = name end
     local dk, dno = c:match("^Delete (%a+) ([%d.]+)")
