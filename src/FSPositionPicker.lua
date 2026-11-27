@@ -63,13 +63,14 @@ local function positionPresets(E)
   end
   table.sort(tilts, function(a, b) return a.deg < b.deg end)   -- back to front
   local ALL = 21
-  local function addFx(name)
+  local mv = E.TC.MOVE_ICON or {}
+  local function addFx(name, icon)
     local s = {}
     for k, tag in ipairs(SIZE_TAG) do s[k] = at[ALL .. ":" .. name .. tag] end
-    if s[1] and s[2] and s[3] then fx[#fx + 1] = {name = name, at = s} end
+    if s[1] and s[2] and s[3] then fx[#fx + 1] = {name = name, at = s, icon = icon} end
   end
-  for _, f in ipairs(E.PAN_FX) do if f[2] then addFx(f[2]) end end
-  for _, f in ipairs(E.TILT_FX) do if f[2] and not f[2]:find("^Fly") then addFx(f[2]) end end
+  for i, f in ipairs(E.PAN_FX) do if f[2] then addFx(f[2], (mv.pan or {})[i]) end end
+  for i, f in ipairs(E.TILT_FX) do if f[2] and not f[2]:find("^Fly") then addFx(f[2], (mv.tilt or {})[i]) end end
   return pans, tilts, fx, made, foreign
 end
 
@@ -89,6 +90,7 @@ local function ask(E, nBtn)
               string.format("(%d sequences per group row + %d for ALL, %d macros + 3 per group row, %d appearances,\n" ..
                             "one MAtricks per group row). Speed master: the one the position FX follow (0 = none).", nBtn + NMX, NMX, nBtn + 4, AP_N),
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
+    states = {{name = ICON_BOX, state = gvar("icons") == "1"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
       {name = "Layout", value = def("layout", "Layout", 1, 1), whiteFilter = "0123456789"},
@@ -103,7 +105,7 @@ local function ask(E, nBtn)
   local i = r.inputs or {}
   return parseGroups(i["Groups"]), tonumber(i["Layout"] or ""), tonumber(i["First sequence"] or ""),
          tonumber(i["First macro"] or ""), tonumber(i["First appearance"] or ""), tonumber(i["First MAtricks"] or ""),
-         tonumber(i["Speed master"] or "") or 0
+         tonumber(i["Speed master"] or "") or 0, (r.states or {})[ICON_BOX] and true or false
 end
 
 local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
@@ -189,7 +191,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
         }, mtx)
         if speed > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", speed) end
       end
-      place(E, L, "Sequence " .. seq, b.col, (b.base or 0) + gi, b.item.name, true)
+      place(E, L, "Sequence " .. seq, b.col, (b.base or 0) + gi, b.item.name, true, b.item.icon)
       bySeq[bi] = bySeq[bi] or {}
       table.insert(bySeq[bi], seq)
       seq = seq + 1
@@ -204,7 +206,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
     local l = {}
     for _, sq in ipairs(bySeq[bi] or {}) do l[#l + 1] = "Goto Sequence " .. sq .. " Cue 1" end
     macro(E, M, P .. "ALL " .. b.item.name .. (b.kind == "fx" and " FX" or ""), l, b.kind == "fx" and AP.fxOn or AP.posOn)
-    place(E, L, "Macro " .. M, b.col, b.base or 0, b.item.name)
+    place(E, L, "Macro " .. M, b.col, b.base or 0, b.item.name, nil, b.item.icon)
     M = M + 1
   end
   -- Small / Mid / Big per group row (4 lines) and for ALL (every row)
@@ -298,14 +300,17 @@ local function main(displayHandle, argument)
   end
   local E = env
   -- (12 pans + 15 tilts + 8 FX: the count for the dialog; the build counts what it really finds)
-  local groups, L, seq0, M0, ap0, mx0, speed = ask(E, 35)
+  local groups, L, seq0, M0, ap0, mx0, speed, icons = ask(E, 35)
   if not groups then return end
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
   if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (L and seq0 and M0 and ap0 and mx0) then return say("Fill in the layout, first sequence, macro, appearance and MAtricks numbers.") end
+  iconsStart(E, icons)
   local ok, lines, err = pcall(buildPicker, E, good, L, seq0, M0, ap0, mx0, speed)
+  local iconNote = iconsFinish(E, ok and lines ~= nil)
+  if iconNote and type(lines) == "table" then lines[#lines + 1] = iconNote end
   pcall(Cmd, "ClearAll")
   if not ok then return say("Stopped: " .. tostring(lines)) end
   if not lines then return say(err) end
