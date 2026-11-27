@@ -99,7 +99,9 @@ function M.new()
     local kind, no = c:match("^Store (%a+) ([%d.]+)")
     if kind and not stub.objects[kind .. " " .. no] then stub.objects[kind .. " " .. no] = true end
     local sq, cue = c:match("^Store Sequence (%d+) Cue (%d+)")
-    if sq then stub.objects["Sequence " .. sq .. " Cue " .. cue] = true end
+    if sq then stub.objects["Sequence " .. sq .. " Cue " .. cue] = stub.objects["Sequence " .. sq .. " Cue " .. cue] or true end
+    local lsq, lcue, cname = c:match('^Label Sequence (%d+) Cue (%d+) "(.*)"$')
+    if lsq then stub.objects["Sequence " .. lsq .. " Cue " .. lcue] = cname end
     local apn, at = c:match("^Assign Appearance (%d+) At (.-)$")
     if apn then stub.ap[at] = tonumber(apn) end
     local rn, r, g, b = c:match('^Set Appearance (%d+) Property "BackR" (%d+) "BackG" (%d+) "BackB" (%d+)')

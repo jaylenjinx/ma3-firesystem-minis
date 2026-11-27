@@ -217,3 +217,22 @@ test("only group buttons (and FS LOS's group toggles) are left with plain text",
   end
   for _, txt in ipairs(plain) do t.ok(txt == "Front" or txt == "Back", "still plain: " .. txt) end
 end)
+
+test("a picker's Off step shows the dark disc, its other steps the lit one", function()
+  local stub = all()
+  run(stub)
+  local checked = 0
+  for p, v in pairs(stub.objects) do
+    local sq = p:match("^(Sequence %d+) Cue %d+$")
+    if sq and v == "Off" and type(stub.objects[sq]) == "string" and stub.objects[sq]:find("^FS GB ") then
+      local a = apName(stub, p) or ""
+      if a:find("^FS r ") then
+        t.ok(a:find(" idle$"), p .. " (Off) got " .. a)
+        local other = apName(stub, sq .. " Cue 2") or ""
+        t.ok(other == "" or other:find(" on$"), sq .. " Cue 2 got " .. other)
+        checked = checked + 1
+      end
+    end
+  end
+  t.ok(checked > 0, "no Gobo Beam picker with an Off step got a disc")
+end)
