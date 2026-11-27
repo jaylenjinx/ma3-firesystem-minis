@@ -4,7 +4,7 @@
     python3 tools/sync_firesystem.py ../ma3-fire-system
 
 The tools are built from these copies, so a FireSystem fix reaches them only after a sync. It
-writes the checkout's commit into firesystem/SOURCE; run tools/make_tools.py afterwards.
+also copies FireSystemIcons.lua (FS Icons' images, shipped in the release). It writes the checkout's commit into firesystem/SOURCE; run tools/make_tools.py afterwards.
 """
 import os, shutil, subprocess, sys
 
@@ -22,6 +22,8 @@ def main(argv):
         if not os.path.exists(f):
             sys.exit("not found: " + f)
         shutil.copyfile(f, os.path.join(ROOT, "firesystem", "FireSystem%s.lua" % m))
+    # the icon pack FS Icons reads (shipped in the release, next to the tools)
+    shutil.copyfile(os.path.join(src, "plugins", "FireSystemIcons.lua"), os.path.join(ROOT, "firesystem", "FireSystemIcons.lua"))
     rev = subprocess.run(["git", "-C", src, "log", "-1", "--format=%h %s"], capture_output=True, text=True).stdout.strip()
     open(os.path.join(ROOT, "firesystem", "SOURCE"), "w").write("ma3-fire-system " + (rev or "(unknown)") + "\n")
     print("copied %d modules from %s (%s)" % (len(MODULES), src, rev))
