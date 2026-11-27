@@ -158,9 +158,16 @@ local function losPresets(E, groups)
   return lists, slots, slotAt, cols, made, foreign
 end
 
--- a typed time in a command: MA's command line reads ".5" as a stray dot (Lyn 2026-11-22: 0.5
--- works, .5 errors), so the variable goes in with a 0 in front (.5 -> 0.5, 2 -> 02)
-local function losNum(var) return "0$" .. var end
+-- a typed time: MA's command line reads ".5" as a stray dot (Lyn 2026-11-22: 0.5 works, .5
+-- errors). Writing "0$var" broke every typed time (Lyn 2026-11-27: Off time stopped working; a
+-- variable glued to a digit isn't read as one). Instead the macro runs this line after the input, which puts
+-- the 0 in front of the stored value (.5 -> 0.5), and the command then uses $var as it is.
+-- (single quotes only: the line sits inside Lua "...")
+local function fixTime(var)
+  return string.format([[Lua "local G = GlobalVars() local v = GetVar(G, '%s') ]] ..
+    [[if type(v) == 'string' and v:sub(1, 1) == '.' then SetVar(G, '%s', '0' .. v) end"]], var, var)
+end
+local function losNum(var) return "$" .. var end
 
 local function setWait(E, M, line, wait)
   local ok = pcall(function() E.obj("Macro " .. M)[line]:Set("Wait", wait) end)
@@ -341,15 +348,15 @@ local function buildLOS(E, groups, o)
     local mAll = string.format("%d Thru %d", x0, x0 + #MXK - 1)
     local TC0 = math.max(TIMING_COL, nG + 0.25)   -- right of the group toggles (up to 20)
     local function setAll(props) local l = {} for _, p in ipairs(props) do l[#l + 1] = string.format('Set MAtricks %s Property "%s" %s', mAll, p[1], p[2]) end return table.concat(l, "; ") end
-    local function input(var, prompt, apply, idx)
-      return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), apply,
+    local function input(var, prompt, apply, idx, num)
+      return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), num and fixTime(var) or apply, num and apply or nil,
               idx and string.format('Set Layout %d.%d Property "CustomTextText" $%s', L, idx, var) or nil}
     end
     local fadeT, delayT, offT, blocksT
     btn(B .. "Fade 0", "Fade 0", TC0, 0, AP.idle, function() return {setAll({{"FadeFromX", '"None"'}, {"FadeToX", '"None"'}}),
       fadeT and string.format('Set Layout %d.%d Property "CustomTextText" "Fade"', L, fadeT.idx) or nil} end, true)
     fadeT = btn(B .. "Fade input", "Fade", TC0 + 1, 0, AP.idle, function(me)
-      return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", losNum(V("fade"))}, {"FadeToX", losNum(V("fade"))}}), me.idx) end)
+      return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", losNum(V("fade"))}, {"FadeToX", losNum(V("fade"))}}), me.idx, true) end)
     btn(B .. "Wings 0", "Wings 0", TC0 + 2.25, 0, AP.idle, function() return {setAll({{"XWings", '"None"'}})} end, true)
     btn(B .. "Wings 2", "Wings 2", TC0 + 3.25, 0, AP.idle, function() return {setAll({{"XWings", '"2"'}})} end)
     -- Blocks: XBlock on every MAtricks of the bank (fixtures in blocks of n act as one)
@@ -364,7 +371,7 @@ local function buildLOS(E, groups, o)
     delayT = btn(B .. "Delay input", "Delay", TC0 + 1, 1, AP.idle, function(me)
       local v = losNum(V("delay"))
       return input(V("delay"), "LOS " .. b .. " Delay",
-        string.format('Set MAtricks %d Property "DelayFromX" "0" "DelayToX" %s; Set MAtricks %d Property "DelayFromX" %s "DelayToX" "0"', A, v, Bm, v), me.idx) end)
+        string.format('Set MAtricks %d Property "DelayFromX" "0" "DelayToX" %s; Set MAtricks %d Property "DelayFromX" %s "DelayToX" "0"', A, v, Bm, v), me.idx, true) end)
     local chase = s0 + #BUMPS - 1
     btn(B .. "Off 0", "Off 0", TC0 + 2.25, 1, AP.idle, function()
       return {string.format("Set CueFade 0 Sequence %s Cue OffCue; Set CueFade 0 Sequence %d Cue 1 Thru 3", sAll, chase),
@@ -372,7 +379,7 @@ local function buildLOS(E, groups, o)
     offT = btn(B .. "Off input", "Off", TC0 + 3.25, 1, AP.idle, function(me)
       local v = losNum(V("off"))
       return input(V("off"), "LOS " .. b .. " Off Time",
-        string.format("Set CueFade %s Sequence %s Cue OffCue; Set CueFade %s Sequence %d Cue 1 Thru 3", v, sAll, v, chase), me.idx) end)
+        string.format("Set CueFade %s Sequence %s Cue OffCue; Set CueFade %s Sequence %d Cue 1 Thru 3", v, sAll, v, chase), me.idx, true) end)
 
     -- place, then fill
     for _, bt in ipairs(btns) do

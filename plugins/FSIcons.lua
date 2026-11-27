@@ -17,7 +17,7 @@
   Steps, STEP, sizes, MAtricks and group buttons have no icon and keep their text. Appearance slots
   that hold something that isn't FireSystem's ("FS ...") are left alone: that button keeps its text.
 
-  The images come from FireSystem's FireSystemIcons.lua in the plugins folder (copy it there from a
+  The images come from FireSystem's FireSystemIcons.lua in the plugins folder (it's in the release zip, or copy it from a
   FireSystem release; it doesn't need importing), or FireSystem's PNGs in media/images, and go into
   FireSystem's own image slots, so a show that has FireSystem shares them. To go back to plain
   buttons, build that tool again. The show doesn't need the plugin afterwards.

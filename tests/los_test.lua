@@ -53,9 +53,33 @@ test("FS LOS: the old option macros are gone; colours and group toggles stay mac
   t.ok(labelled(stub, "FS LO LOS1 Group 1", "Macro"), "no group toggle")
 end)
 
-test("FS LOS: a typed time goes in with a 0 in front, so .5 reads as 0.5 (MA's command line needs the digit)", function()
-  local _, main = ma.load("FSLOS")
-  local num = ma.find(main, "losNum")
-  t.ok(num, "no losNum")
-  t.eq(num("FSLO_b1_fade"), "0$FSLO_b1_fade")
+-- the lines of the macro labelled `label`
+local function macroLines(stub, label)
+  local no = labelled(stub, label, "Macro")
+  return no and stub.lines["Macro " .. no]
+end
+-- runs a macro's Lua line (Lua "...") on the stub's variables
+local function runLua(stub, line)
+  local code = line:match('^Lua "(.*)"$')
+  assert(code, "not a Lua line: " .. tostring(line))
+  assert(not code:find('"', 1, true), "a double quote inside the Lua line ends it early: " .. line)
+  assert(load(code, "macro line", "t", stub.G))()
+end
+
+test("FS LOS: Off / Fade / Delay inputs use the variable as typed ($var, not 0$var), after a line that makes .5 read 0.5", function()
+  local stub = build()
+  for _, x in ipairs({{"FS LO LOS1 Off input", "FSLO_b1_off", "CueFade"}, {"FS LO LOS1 Fade input", "FSLO_b1_fade", "FadeFromX"},
+                      {"FS LO LOS1 Delay input", "FSLO_b1_delay", "DelayToX"}}) do
+    local l = macroLines(stub, x[1])
+    t.ok(l, "no lines for " .. x[1])
+    t.ok(l[1]:find("^SetGlobalVariable"), x[1] .. " line 1: " .. tostring(l[1]))
+    t.ok(l[2]:find("^Lua "), x[1] .. " line 2 isn't the .5 fix: " .. tostring(l[2]))
+    t.ok(l[3]:find(x[3], 1, true) and l[3]:find(" $" .. x[2], 1, true), x[1] .. " line 3: " .. tostring(l[3]))
+    for _, c in ipairs(l) do t.ok(not c:find("0$", 1, true), x[1] .. ": 0$ in " .. c) end
+    for _, v in ipairs({{".5", "0.5"}, {"2", "2"}, {"0.5", "0.5"}, {"1.25", "1.25"}}) do
+      stub.vars[x[2]] = v[1]
+      runLua(stub, l[2])
+      t.eq(stub.vars[x[2]], v[2], x[1] .. " typed " .. v[1])
+    end
+  end
 end)

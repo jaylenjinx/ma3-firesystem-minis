@@ -4,13 +4,14 @@
 -- through ma_stub.load("FSPresets"), which runs plugins/FSPresets.lua the way MA does.
 -- stub.objects["Group 1"] = true makes ObjectList find that object (nothing exists otherwise);
 -- a string value is the object's name (stub.objects["Layout 1"] = "FS CP Layout" is a tool's own),
--- and ObjectList('Sequence "name"') finds it by that name.
+-- and ObjectList('Sequence "name"') finds it by that name. stub.lines["Macro 101"] lists a macro's
+-- line commands.
 local M = {}
 
 local function nothing() return nil end
 
 function M.new()
-  local stub = {cmds = {}, messages = {}, vars = {}, objects = {}}
+  local stub = {cmds = {}, messages = {}, vars = {}, objects = {}, lines = {}}
   local G = {}
   for k, v in pairs(_G) do G[k] = v end
   G._G = G
@@ -58,6 +59,21 @@ function M.new()
       h.Count = function(self) return #self.elements end
       h.Delete = function(self, i) table.remove(self.elements, i) end
       h.Children = function(self) return self.elements end
+      -- a macro's lines: Append gives a line whose Set("Command", c) is kept in stub.lines[path]
+      h.Append = function(self)
+        local ln = {}
+        ln.Set = function(me, k, v)
+          me[k] = v
+          if k == "Command" then
+            stub.lines[path] = stub.lines[path] or {}
+            local list = {}
+            for _, e in ipairs(self.elements) do list[#list + 1] = e.Command end
+            stub.lines[path] = list
+          end
+        end
+        self.elements[#self.elements + 1] = ln
+        return ln
+      end
       h.GetClass = function() return path:match("^(%a+)") end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
