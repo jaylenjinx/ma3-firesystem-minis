@@ -132,7 +132,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <li>Copy the tools you want into <code>gma3_library/datapools/plugins/</code>. On onPC that's <code>~/MALightingTechnology/gma3_library/datapools/plugins/</code>; on a console, a USB stick with the same folders.</li>
       <li>Import each tool's XML into the Plugins pool, e.g. <code>FSColourPicker.xml</code>.</li>
       <li>Click the tool once. It asks for the groups (Groups 1-8 by default, up to 20) and where things go, then builds.</li>
-      <li>For FireSystem&#39;s button icons, copy FireSystemIcons.lua from the release zip into the plugins folder too (it needs no import) and run FS Icons after the other tools.</li>
+      <li>For icons on the buttons, run FS Icons after the other tools (the images are in the plugin).</li>
     </ol>
     <p class="note">Made for grandMA3 2.4 and newer. When you update a tool, import it again in the Plugins pool: ReloadAllPlugins doesn't pick up new files.</p>
 
@@ -265,8 +265,9 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <ul class="points">
         <li>Run it after the other tools. Every button FireSystem draws with an icon (forms, levels, pans, tilts, position FX, Off, Rnd, Strobe, Iris, Zoom, Gobo, Prism) gets FireSystem&#39;s round icon disc, dark when off and lit when on, without text. 0, 50 and 100 % get the orange number discs.</li>
         <li>Tick <i>Keep each button&#39;s colour and text</i> to keep the tools&#39; own colours and text, with FireSystem&#39;s square icon on top.</li>
-        <li>Steps, STEP, sizes, MAtricks and group buttons keep their text. Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
-        <li>The images come from FireSystemIcons.lua in the plugins folder (from a FireSystem release; no need to import it) or FireSystem&#39;s PNGs in media/images.</li>
+        <li>Buttons FireSystem has no icon for get the minis&#39; own: Fade, Delay, Wings, Phase, Blocks, Speed, Groups, Steps, Part, Master, Hold, Out, Focus, Frost and the LOS inputs get a small icon at the top and keep their text (it shows the value); the extra tilts, FX Big / Mid / Small, Normal / Pastel / Dark and the LOS bumps get a full disc.</li>
+        <li>Colour swatches, Colour FX&#39;s STEP buttons, Bumps&#39; Color and group buttons stay as they are (they show colours). Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
+        <li>The images are in the plugin: nothing else to copy or import. They go into FireSystem&#39;s image slots (the minis&#39; own into Image 3.3101+, Appearances 9101+), so a show with FireSystem shares them.</li>
         <li>Run it again after rebuilding a tool. To go back to plain buttons, rebuild that tool.</li>
       </ul>
     </section>

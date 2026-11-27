@@ -49,6 +49,8 @@ function M.new()
   -- (an object's appearance: stub.ap["Sequence 5 Cue 1"] = 3001, set by Assign Appearance;
   -- an appearance's colour: stub.rgb[3001] = {r, g, b}, set by its BackR / BackG / BackB)
   stub.ap, stub.rgb = {}, {}
+  -- (a cue's name: stub.cueNames["Sequence 5 Cue 1"] = "Off", set by Label Sequence 5 Cue 1 "Off")
+  stub.cueNames = {}
   local handle
   function handle(path)
     local o = stub.objects[path]
@@ -77,7 +79,10 @@ function M.new()
       h.GetClass = function() return path:match("^(%a+)") end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
-        if k == "name" or k == "Name" then local v = stub.objects[path] return type(v) == "string" and v or path end
+        if k == "name" or k == "Name" then
+          local v = stub.objects[path]
+          return type(v) == "string" and v or stub.cueNames[path] or path
+        end
         if k == "no" or k == "No" then return tonumber(path:match("(%d+)$")) end
         if k == "Appearance" then return stub.ap[path] and handle("Appearance " .. stub.ap[path]) end
         local rgb = stub.rgb[tonumber(path:match("^Appearance (%d+)$"))]
@@ -120,6 +125,8 @@ function M.new()
     if apn then stub.ap[at] = tonumber(apn) end
     local rn, r, g, b = c:match('^Set Appearance (%d+) Property "BackR" (%d+) "BackG" (%d+) "BackB" (%d+)')
     if rn then stub.rgb[tonumber(rn)] = {tonumber(r), tonumber(g), tonumber(b)} end
+    local lsq, lcue, lname = c:match('^Label Sequence (%d+) Cue (%d+) "(.*)"$')
+    if lsq then stub.cueNames["Sequence " .. lsq .. " Cue " .. lcue] = lname end
     local lk, lno, name = c:match('^Label (%a+) ([%d.]+) "(.*)"$')
     if lk then stub.objects[lk .. " " .. lno] = name end
     local dk, dno = c:match("^Delete (%a+) ([%d.]+)")
