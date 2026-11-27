@@ -15,8 +15,8 @@
   Steps, STEP, sizes, MAtricks and group buttons have no icon and keep their text. Appearance slots
   that hold something that isn't FireSystem's ("FS ...") are left alone: that button keeps its text.
 
-  The images come from FireSystem's FireSystemIcons.lua in the plugins folder (copy it there from a
-  FireSystem release; it doesn't need importing), or FireSystem's PNGs in media/images, and go into
+  The images come from FireSystem's FireSystemIcons.lua in the plugins folder (it's in every FS
+  Minis release: copy it next to the tools; it doesn't need importing), or FireSystem's PNGs in media/images, and go into
   FireSystem's own image slots, so a show that has FireSystem shares them. To go back to plain
   buttons, build that tool again. The show doesn't need the plugin afterwards.
 
@@ -239,7 +239,7 @@ local function applyIcons(E, keep)
   local lines = {}
   if n == 0 and missed > 0 then
     lines[1] = "No icon images found" .. (pack and "" or " (no FireSystemIcons.lua in the plugins folder)") ..
-      ". Copy FireSystemIcons.lua from a FireSystem release into the plugins folder (or FireSystem's PNGs into media/images), then run " .. TITLE .. " again."
+      ". Copy FireSystemIcons.lua from the FS Minis release into the plugins folder (or FireSystem's PNGs into media/images), then run " .. TITLE .. " again."
     return lines
   end
   lines[1] = string.format("%d buttons on %d layout%s got FireSystem icons%s.", n, used, used == 1 and "" or "s",

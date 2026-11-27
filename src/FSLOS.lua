@@ -158,9 +158,14 @@ local function losPresets(E, groups)
   return lists, slots, slotAt, cols, made, foreign
 end
 
--- a typed time in a command: MA's command line reads ".5" as a stray dot (Lyn 2026-11-22: 0.5
--- works, .5 errors), so the variable goes in with a 0 in front (.5 -> 0.5, 2 -> 02)
-local function losNum(var) return "0$" .. var end
+-- a typed time in a command: $var on its own (MA doesn't expand a variable glued to other text,
+-- so "0$var" broke the times). MA's command line reads ".5" as a stray dot (Lyn 2026-11-22: 0.5
+-- works, .5 errors), so the input macro runs losFixDot's Lua line first: .5 -> 0.5, ,5 -> 0.5
+local function losNum(var) return "$" .. var end
+local function losFixDot(var)
+  return string.format("Lua \"local g = GlobalVars() local v = tostring(GetVar(g, '%s') or ''):gsub('^%%s+', ''):gsub(',', '.') " ..
+    "if v:sub(1, 1) == '.' then v = '0' .. v end SetVar(g, '%s', v)\"", var, var)
+end
 
 local function setWait(E, M, line, wait)
   local ok = pcall(function() E.obj("Macro " .. M)[line]:Set("Wait", wait) end)
@@ -342,7 +347,7 @@ local function buildLOS(E, groups, o)
     local TC0 = math.max(TIMING_COL, nG + 0.25)   -- right of the group toggles (up to 20)
     local function setAll(props) local l = {} for _, p in ipairs(props) do l[#l + 1] = string.format('Set MAtricks %s Property "%s" %s', mAll, p[1], p[2]) end return table.concat(l, "; ") end
     local function input(var, prompt, apply, idx)
-      return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), apply,
+      return {string.format('SetGlobalVariable "%s" (%s)', var, prompt), losFixDot(var), apply,
               idx and string.format('Set Layout %d.%d Property "CustomTextText" $%s', L, idx, var) or nil}
     end
     local fadeT, delayT, offT, blocksT

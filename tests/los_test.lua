@@ -53,9 +53,20 @@ test("FS LOS: the old option macros are gone; colours and group toggles stay mac
   t.ok(labelled(stub, "FS LO LOS1 Group 1", "Macro"), "no group toggle")
 end)
 
-test("FS LOS: a typed time goes in with a 0 in front, so .5 reads as 0.5 (MA's command line needs the digit)", function()
+test("FS LOS: typed times go in as $var, and a Lua line first turns .5 into 0.5", function()
   local _, main = ma.load("FSLOS")
-  local num = ma.find(main, "losNum")
-  t.ok(num, "no losNum")
-  t.eq(num("FSLO_b1_fade"), "0$FSLO_b1_fade")
+  local num, fix = ma.find(main, "losNum"), ma.find(main, "losFixDot")
+  t.ok(num and fix, "no losNum / losFixDot")
+  -- (MA doesn't expand a variable glued to other text: 0$x stayed as it was, so Off Time broke)
+  t.eq(num("FSLO_b1_off"), "$FSLO_b1_off")
+  local line = fix("FSLO_b1_off")
+  local code = line:match('^Lua "(.*)"$')
+  t.ok(code and not code:find('"'), "not a Lua command line: " .. line)
+  for _, c in ipairs({{".5", "0.5"}, ["2"] = nil, {"2", "2"}, {"0.5", "0.5"}, {" .25", "0.25"}, {",5", "0.5"}}) do
+    local vars = {FSLO_b1_off = c[1]}
+    local env = {GlobalVars = function() return vars end, GetVar = function(t2, k) return t2[k] end,
+                 SetVar = function(t2, k, v) t2[k] = v end, tostring = tostring}
+    assert(load(code, "fix", "t", env))()
+    t.eq(vars.FSLO_b1_off, c[2], "typed " .. c[1])
+  end
 end)
