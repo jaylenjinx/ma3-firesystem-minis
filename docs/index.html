@@ -93,6 +93,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li><a href="#bumps">FS Bumps</a></li>
         <li><a href="#los">FS LOS</a></li>
         <li><a href="#masters">FS Masters</a></li>
+        <li><a href="#icons">FS Icons</a></li>
       </ul>
       <h4>More</h4>
       <ul>
@@ -122,6 +123,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <a class="card" href="#bumps"><b>FS Bumps</b><span>Bump, Go+ step and strobe keys with live look pickers</span></a>
       <a class="card" href="#los"><b>FS LOS</b><span>Live Output System bumps, StartShow style</span></a>
       <a class="card" href="#masters"><b>FS Masters</b><span>FireSystem&#39;s executor page 1: keys, group masters, speed masters</span></a>
+      <a class="card" href="#icons"><b>FS Icons</b><span>FireSystem&#39;s icons on the other tools&#39; buttons</span></a>
     </div>
 
     <h2 id="install">Install</h2>
@@ -130,7 +132,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <li>Copy the tools you want into <code>gma3_library/datapools/plugins/</code>. On onPC that's <code>~/MALightingTechnology/gma3_library/datapools/plugins/</code>; on a console, a USB stick with the same folders.</li>
       <li>Import each tool's XML into the Plugins pool, e.g. <code>FSColourPicker.xml</code>.</li>
       <li>Click the tool once. It asks for the groups (Groups 1-8 by default, up to 20) and where things go, then builds.</li>
-      <li>Tick <i>Icons (FireSystemIcons.lua)</i> for FireSystem&#39;s button icons. Put FireSystemIcons.lua from a FireSystem release in the plugins folder first.</li>
+      <li>For FireSystem&#39;s button icons, put FireSystemIcons.lua from a FireSystem release in the plugins folder and run FS Icons after the other tools.</li>
     </ol>
     <p class="note">Made for grandMA3 2.4 and newer. When you update a tool, import it again in the Plugins pool: ReloadAllPlugins doesn't pick up new files.</p>
 
@@ -254,6 +256,18 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>Speed masters 1&ndash;5 on 210, 209, 409, 410 and 211, and playback masters 1 and 2 on 209 and 210 of the next page, named as in FireSystem.</li>
         <li>The group faders are playback masters on each group&#39;s FS Dimmer FX buttons, so they dim the group&#39;s look while bumps and LOS play through at full. Untick <i>Faders skip bumps and LOS</i> for plain group masters, which limit everything in the group.</li>
         <li>An executor that holds something else is left as it is and listed.</li>
+      </ul>
+    </section>
+
+    <section class="tool" id="icons">
+      <h2>FS Icons</h2>
+      <p class="file">FSIcons.xml</p>
+      <ul class="points">
+        <li>Run it after the other tools. Every button FireSystem draws with an icon (forms, levels, pans, tilts, position FX, Off, Rnd, Strobe, Iris, Zoom, Gobo, Prism) gets FireSystem&#39;s round icon disc, dark when off and lit when on, without text. 0, 50 and 100 % get the orange number discs.</li>
+        <li>Tick <i>Keep each button&#39;s colour and text</i> to keep the tools&#39; own colours and text, with FireSystem&#39;s square icon on top.</li>
+        <li>Steps, STEP, sizes, MAtricks and group buttons keep their text. Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
+        <li>The images come from FireSystemIcons.lua in the plugins folder (from a FireSystem release; no need to import it) or FireSystem&#39;s PNGs in media/images.</li>
+        <li>Run it again after rebuilding a tool. To go back to plain buttons, rebuild that tool.</li>
       </ul>
     </section>
 

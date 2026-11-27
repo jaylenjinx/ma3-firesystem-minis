@@ -10206,155 +10206,10 @@ local function setProp(E, addr, prop, val)
                   string.format('Set %s Property "%s" "%s"', addr, prop:gsub("(%l)(%u)", "%1 %2"), val) })
 end
 
--- ======================================================================
--- Icons (the dialog's "Icons" tick box): FireSystem's button icons from FireSystemIcons.lua.
--- The build runs as usual; iconsStart records which appearance each sequence / cue / macro gets,
--- place records the buttons whose text has an icon, and iconsFinish gives those buttons an
--- appearance with the same colour plus the icon ("FS IC <icon> <appearance>", Appearance 3001+).
--- The images go into FireSystem's own slots (Image 3.201+), so a show with FireSystem shares them.
--- ======================================================================
-local ICONS = {on = false}
-local ICON_BOX = "Icons (FireSystemIcons.lua)"   -- the dialogs' tick box
-local ICON_AP_FROM = 3001
-local AP_RGB = {}  -- appearance -> colour (this tool's own appearances)
-
 local function appearance(E, no, label, rgb)
   if not E.obj("Appearance " .. no) then E.C("Store Appearance %d", no) end
   E.C("Label Appearance %d %s", no, E.q(label))
   E.setApColor(no, rgb)
-  AP_RGB[no] = rgb
-end
-
--- button text -> FireSystem icon name, or nil
-local function iconFor(E, text)
-  if not text or text == "" then return nil end
-  local m = ICONS.map
-  if not m then
-    m = {["0%"] = "bulb_off", ["50%"] = "bulb_half", ["100%"] = "bulb_full", Off = "power", Bump = "bulb_full",
-         Rnd = "random", Strobe = "strobe", Iris = "iris", Zoom = "cone", Gobo = "gobo", ["Gobo 1"] = "gobo",
-         ["Gobo 2"] = "gobo", Prism = "prism", Dim = "bulb_half", Pos = "fan"}
-    for k, v in pairs(E.FN.ICON_BY_LABEL or {}) do m[k] = m[k] or v end
-    for _, f in ipairs(E.DIM_FORMS or {}) do if E.FN.ICON_BY_LABEL[f[1]] then m[f[2]] = E.FN.ICON_BY_LABEL[f[1]] end end
-    local mv = E.TC and E.TC.MOVE_ICON or {}
-    for i, f in ipairs(E.PAN_FX or {}) do if f[2] and mv.pan and mv.pan[i] then m[f[2]] = mv.pan[i] end end
-    for i, f in ipairs(E.TILT_FX or {}) do if f[2] and mv.tilt and mv.tilt[i] then m[f[2]] = mv.tilt[i] end end
-    -- (pans / tilts win where an FX has the same name: the FX buttons pass their own icon)
-    for i, p in ipairs(E.PANS or {}) do if p[2] then m[p[2]] = "pan" .. i end end
-    for i, t in ipairs(E.TILTS or {}) do if t[2] then m[t[2]] = "tilt" .. i end end
-    ICONS.map = m
-  end
-  local icon = m[text]
-  return (icon and E.ICON_IDX and E.ICON_IDX[icon]) and icon or nil
-end
-
--- the icon pack: FireSystemIcons.lua next to the plugins (library datapools/plugins), read into
--- this tool's copy of the modules so their image import can write the PNGs out
-local function loadIconPack(E)
-  if E.FireSystemIconData then return true end
-  local paths = {}
-  pcall(function() paths[#paths + 1] = E.PATHS.lib("datapools", "plugins", "FireSystemIcons.lua") end)
-  pcall(function() paths[#paths + 1] = E.PATHS.lib("plugins", "FireSystemIcons.lua") end)
-  for _, path in ipairs(paths) do
-    local env = {type = type}
-    local chunk
-    local f = io.open(path, "rb")
-    if f then
-      local src = f:read("a") f:close()
-      chunk = load(src, "=FireSystemIcons", "t", env)
-    end
-    if chunk then
-      local sig = {}
-      pcall(chunk, nil, sig)
-      local D = sig.FireSystemIconData or env.FireSystemIconData
-      if type(D) == "table" then E.FireSystemIconData = D return true end
-    end
-  end
-  return false
-end
-
--- start recording (on = the tick box); returns nothing
-local function iconsStart(E, on)
-  svar("icons", on and "1" or "0")
-  ICONS = {on = on and true or false, seq = {}, cue = {}, mac = {}, btn = {}, made = {}}
-  if not ICONS.on then return end
-  ICONS.pack = loadIconPack(E)
-  local C0 = E.C
-  ICONS.C0 = C0
-  E.C = function(fmt, ...)
-    local s = (select("#", ...) > 0) and string.format(fmt, ...) or fmt
-    local ap, rest = s:match("^Assign Appearance (%d+) At (.+)$")
-    if ap then
-      ap = tonumber(ap)
-      local sq, k = rest:match("^Sequence (%d+) Cue (%d+)$")
-      if sq then
-        sq = tonumber(sq)
-        ICONS.cue[sq] = ICONS.cue[sq] or {}
-        ICONS.cue[sq][tonumber(k)] = ap
-      elseif rest:match("^Sequence %d+$") then ICONS.seq[tonumber(rest:match("%d+"))] = ap
-      elseif rest:match("^Macro %d+$") then ICONS.mac[tonumber(rest:match("%d+"))] = ap end
-    end
-    return C0(s)
-  end
-end
-
--- the image of an icon in the show (imported once from the pack or media/images), or nil
-local function iconImage(E, icon)
-  local idx = E.ICON_IDX[icon]
-  local no = E.CFG.ICON_IMAGE_BASE + idx - 1
-  if E.importImage(no, "fs_" .. icon .. ".png") then return no end
-  return nil
-end
-
--- the icon version of appearance ap: same colour, with the icon image
-local function iconAp(E, icon, ap)
-  local key = icon .. " " .. ap
-  if ICONS.made[key] ~= nil then return ICONS.made[key] or nil end
-  local rgb, img = AP_RGB[ap], iconImage(E, icon)
-  if not rgb or not img then ICONS.made[key] = false return nil end
-  local want = E.fs("IC " .. key)
-  local no
-  local l = ObjectList('Appearance "' .. want .. '"')
-  if l and l[1] then pcall(function() no = l[1].no end) end
-  if not no then
-    no = ICON_AP_FROM
-    while E.obj("Appearance " .. no) and no < 9999 do no = no + 1 end
-  end
-  E.imageAp(no, want, rgb, img)
-  ICONS.made[key] = no
-  return no
-end
-
--- give the recorded buttons their icons (ok = the build went through); returns a line for the
--- build message, or nil
-local function iconsFinish(E, ok)
-  if not ICONS.on then return nil end
-  E.C = ICONS.C0
-  if not ok then ICONS.on = false return nil end
-  local n = 0
-  for _, b in ipairs(ICONS.btn) do
-    local done = false
-    if b.kind == "Sequence" then
-      local off = ICONS.seq[b.no] and iconAp(E, b.icon, ICONS.seq[b.no])
-      if off then E.C("Assign Appearance %d At Sequence %d", off, b.no) done = true end
-      for k, ap in pairs(ICONS.cue[b.no] or {}) do
-        local on = iconAp(E, b.icon, ap)
-        if on then
-          E.C("Assign Appearance %d At Sequence %d Cue %d", on, b.no, k)
-          E.Cany({ string.format("Assign Appearance %d At Sequence %d Cue %d Part 0", on, b.no, k) })
-          done = true
-        end
-      end
-    elseif b.kind == "Macro" then
-      local ap = ICONS.mac[b.no] and iconAp(E, b.icon, ICONS.mac[b.no])
-      if ap then E.C("Assign Appearance %d At Macro %d", ap, b.no) done = true end
-    end
-    if done then n = n + 1 end
-  end
-  ICONS.on = false
-  if n == 0 and #ICONS.btn > 0 then
-    return "Icons: no icon images found. Put FireSystemIcons.lua in the plugins folder (or FireSystem's PNGs in media/images), then build again."
-  end
-  return string.format("Icons: %d buttons got FireSystem icons (Appearances %d+).", n, ICON_AP_FROM)
 end
 
 -- one picker button: Sequence seq with a recipe line (Group g At Preset "pool.no") in each cue.
@@ -10394,7 +10249,7 @@ local function buttonSeq(E, seq, label, g, apOff, cues, mtx)
   E.C("Assign Appearance %d At Sequence %d", apOff, seq)
 end
 
-local function place(E, L, what, col, row, text, toggle, icon)
+local function place(E, L, what, col, row, text, toggle)
   local lh = E.obj("Layout " .. L)
   local before = 0
   pcall(function() before = lh:Count() end)
@@ -10402,12 +10257,6 @@ local function place(E, L, what, col, row, text, toggle, icon)
   local idx
   pcall(function() idx = E.obj("Layout " .. L):Count() end)
   if not idx or idx <= before then return end
-  -- (Icons: buttons whose text has a FireSystem icon get it at the end of the build)
-  if ICONS.on then
-    local kind, no = what:match("^(%a+) (%d+)$")
-    icon = kind and ((icon and E.ICON_IDX[icon] and icon) or iconFor(E, text))
-    if icon then ICONS.btn[#ICONS.btn + 1] = {kind = kind, no = tonumber(no), icon = icon} end
-  end
   E.C('Set Layout %d.%d Property "PosX" %d "PosY" %d "PositionW" %d "PositionH" %d',
       L, idx, math.floor(col * (BTN + GAP) + 0.5), math.floor(-row * (BTN + GAP) + 0.5), BTN, BTN)
   pcall(function()
@@ -10628,14 +10477,13 @@ local function positionPresets(E)
   end
   table.sort(tilts, function(a, b) return a.deg < b.deg end)   -- back to front
   local ALL = 21
-  local mv = E.TC.MOVE_ICON or {}
-  local function addFx(name, icon)
+  local function addFx(name)
     local s = {}
     for k, tag in ipairs(SIZE_TAG) do s[k] = at[ALL .. ":" .. name .. tag] end
-    if s[1] and s[2] and s[3] then fx[#fx + 1] = {name = name, at = s, icon = icon} end
+    if s[1] and s[2] and s[3] then fx[#fx + 1] = {name = name, at = s} end
   end
-  for i, f in ipairs(E.PAN_FX) do if f[2] then addFx(f[2], (mv.pan or {})[i]) end end
-  for i, f in ipairs(E.TILT_FX) do if f[2] and not f[2]:find("^Fly") then addFx(f[2], (mv.tilt or {})[i]) end end
+  for _, f in ipairs(E.PAN_FX) do if f[2] then addFx(f[2]) end end
+  for _, f in ipairs(E.TILT_FX) do if f[2] and not f[2]:find("^Fly") then addFx(f[2]) end end
   return pans, tilts, fx, made, foreign
 end
 
@@ -10655,7 +10503,6 @@ local function ask(E, nBtn)
               string.format("(%d sequences per group row + %d for ALL, %d macros + 3 per group row, %d appearances,\n" ..
                             "one MAtricks per group row). Speed master: the one the position FX follow (0 = none).", nBtn + NMX, NMX, nBtn + 4, AP_N),
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
-    states = {{name = ICON_BOX, state = gvar("icons") == "1"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
       {name = "Layout", value = def("layout", "Layout", 1, 1), whiteFilter = "0123456789"},
@@ -10670,7 +10517,7 @@ local function ask(E, nBtn)
   local i = r.inputs or {}
   return parseGroups(i["Groups"]), tonumber(i["Layout"] or ""), tonumber(i["First sequence"] or ""),
          tonumber(i["First macro"] or ""), tonumber(i["First appearance"] or ""), tonumber(i["First MAtricks"] or ""),
-         tonumber(i["Speed master"] or "") or 0, (r.states or {})[ICON_BOX] and true or false
+         tonumber(i["Speed master"] or "") or 0
 end
 
 local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
@@ -10756,7 +10603,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
         }, mtx)
         if speed > 0 then E.trySeqMaster(seq, "SpeedMaster", "Speed", speed) end
       end
-      place(E, L, "Sequence " .. seq, b.col, (b.base or 0) + gi, b.item.name, true, b.item.icon)
+      place(E, L, "Sequence " .. seq, b.col, (b.base or 0) + gi, b.item.name, true)
       bySeq[bi] = bySeq[bi] or {}
       table.insert(bySeq[bi], seq)
       seq = seq + 1
@@ -10771,7 +10618,7 @@ local function buildPicker(E, groups, L, seq0, M0, ap0, mx0, speed)
     local l = {}
     for _, sq in ipairs(bySeq[bi] or {}) do l[#l + 1] = "Goto Sequence " .. sq .. " Cue 1" end
     macro(E, M, P .. "ALL " .. b.item.name .. (b.kind == "fx" and " FX" or ""), l, b.kind == "fx" and AP.fxOn or AP.posOn)
-    place(E, L, "Macro " .. M, b.col, b.base or 0, b.item.name, nil, b.item.icon)
+    place(E, L, "Macro " .. M, b.col, b.base or 0, b.item.name)
     M = M + 1
   end
   -- Small / Mid / Big per group row (4 lines) and for ALL (every row)
@@ -10865,17 +10712,14 @@ local function main(displayHandle, argument)
   end
   local E = env
   -- (12 pans + 15 tilts + 8 FX: the count for the dialog; the build counts what it really finds)
-  local groups, L, seq0, M0, ap0, mx0, speed, icons = ask(E, 35)
+  local groups, L, seq0, M0, ap0, mx0, speed = ask(E, 35)
   if not groups then return end
   local good = {}
   for _, g in ipairs(groups) do if E.obj("Group " .. g) then good[#good + 1] = g end end
   if #good == 0 then return say("None of those groups exist yet. Store your groups first, then run " .. TITLE .. " again.") end
   if #good > MAX_GROUPS then return say("Pick up to " .. MAX_GROUPS .. " groups.") end
   if not (L and seq0 and M0 and ap0 and mx0) then return say("Fill in the layout, first sequence, macro, appearance and MAtricks numbers.") end
-  iconsStart(E, icons)
   local ok, lines, err = pcall(buildPicker, E, good, L, seq0, M0, ap0, mx0, speed)
-  local iconNote = iconsFinish(E, ok and lines ~= nil)
-  if iconNote and type(lines) == "table" then lines[#lines + 1] = iconNote end
   pcall(Cmd, "ClearAll")
   if not ok then return say("Stopped: " .. tostring(lines)) end
   if not lines then return say(err) end

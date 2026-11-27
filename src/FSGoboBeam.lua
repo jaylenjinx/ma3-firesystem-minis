@@ -97,7 +97,6 @@ local function ask(E)
               "The numbers below are where the layout and its sequences, appearances and MAtricks go\n" ..
               string.format("(%d sequences, %d appearances, %d MAtricks).", nSeq, AP_N, rows),
     commands = {{value = 1, name = "Build"}, {value = 0, name = "Cancel"}},
-    states = {{name = ICON_BOX, state = gvar("icons") == "1"}},
     inputs = {
       {name = "Groups", value = groups, whiteFilter = "0123456789 ,+-ThruTHRU"},
       {name = "Layout", value = def("layout", "Layout", 1, 1), whiteFilter = "0123456789"},
@@ -109,7 +108,7 @@ local function ask(E)
   if not r or r.result ~= 1 then return nil end
   local i = r.inputs or {}
   local function n(k) return tonumber(i[k] or "") end
-  return parseGroups(i["Groups"]), {icons = (r.states or {})[ICON_BOX] and true or false, L = n("Layout"), seq0 = n("First sequence"), ap0 = n("First appearance"),
+  return parseGroups(i["Groups"]), {L = n("Layout"), seq0 = n("First sequence"), ap0 = n("First appearance"),
     mx0 = n("First MAtricks")}
 end
 
@@ -252,10 +251,7 @@ local function main(displayHandle, argument)
   if not (o.L and o.seq0 and o.ap0 and o.mx0) then
     return say("Fill in the layout, first sequence, appearance and MAtricks numbers.")
   end
-  iconsStart(E, o.icons)
   local ok, lines, err = pcall(buildGB, E, good, o)
-  local iconNote = iconsFinish(E, ok and lines ~= nil)
-  if iconNote and type(lines) == "table" then lines[#lines + 1] = iconNote end
   pcall(Cmd, "ClearAll")
   if not ok then return say("Stopped: " .. tostring(lines)) end
   if not lines then return say(err) end

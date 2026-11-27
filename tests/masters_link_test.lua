@@ -68,11 +68,13 @@ end)
 
 test("every tool takes up to 20 groups and turns down 21", function()
   for _, tool in ipairs(ma.tools()) do
+    if tool == "FSIcons" then goto continue end   -- (no groups: it works on the other tools' layouts)
     local stub = run(tool, 21, {Groups = "1 Thru 20"})
     local msg = stub.messages[#stub.messages] or ""
     t.ok(not msg:find("Pick up to"), tool .. " refused 20 groups")
     local s2 = run(tool, 21, {Groups = "1 Thru 21"})
     t.ok((s2.messages[#s2.messages] or ""):find("Pick up to 20"), tool .. " took 21 groups")
+    ::continue::
   end
 end)
 
