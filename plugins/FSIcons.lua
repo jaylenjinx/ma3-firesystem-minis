@@ -19,7 +19,8 @@
   STEP 1-5, Step Count, FS LOS's timing) keep their text, which changes, with an icon above it in
   the button's own colours (FireSystem look: on black where the button was grey). Icon buttons lose
   their border. Buttons that light one of a set (Normal / Pastel / Dark, 2 / 3 Steps, Small / Mid /
-  Big, FS LOS's colours) get their macro lines pointed at the icons, so a tap keeps them. Group buttons keep their text. Appearance slots that hold something that
+  Big, FS LOS's colours) get their macro lines pointed at the icons, so a tap keeps them. Group buttons keep their text; buttons with no icon (groups, FS LOS's
+  group toggles) go black when off in the FireSystem look. Appearance slots that hold something that
   isn't FireSystem's ("FS ...") are left alone: that button keeps its text.
 
   The images are inside this plugin (FireSystem's, as its FireSystemIcons.lua has them, and this
@@ -11276,6 +11277,26 @@ local function colourAp(E, made, icon, rgb, black)
   return no
 end
 
+-- the plain black appearance (no image), for buttons with no icon of their own: FireSystem look
+-- puts their off look on black like the discs
+local function blackAp(E, made)
+  if made.black ~= nil then return made.black or nil end
+  local want = E.fs(TAG .. " plain 0.0.0")
+  local no
+  local l = ObjectList('Appearance "' .. want .. '"')
+  if l and l[1] then pcall(function() no = tonumber(l[1].no) end) end
+  if not no then
+    no = KEEP_AP_FROM
+    while E.obj("Appearance " .. no) and no < 9999 do no = no + 1 end
+    if no >= 9999 then made.black = false return nil end
+    E.C("Store Appearance %d /Overwrite", no)
+    E.C("Label Appearance %d %s", no, E.q(want))
+    E.setApColor(no, {0, 0, 0})
+  end
+  made.black = no
+  return no
+end
+
 -- an appearance's colour ({r, g, b}), or nil
 local function apColour(E, no)
   local rgb
@@ -11315,6 +11336,29 @@ local function toolLayouts(E)
   return found
 end
 
+-- a button with no icon (group buttons, FS LOS's group toggles), FireSystem look: an off (dark)
+-- look goes black. A group's own appearance that isn't FireSystem's stays. Returns nil (no icon).
+local function plainButton(E, made, e, addr, mark)
+  local cur, name
+  pcall(function() cur = E.obj(addr).Appearance end)
+  if cur then
+    pcall(function() name = tostring(E.objName(cur) or "") end)
+    if not (name and name:sub(1, #E.CFG.PREFIX + 1) == E.CFG.PREFIX .. " ") then return nil end
+    local no
+    pcall(function() no = tonumber(cur.no) end)
+    if not no or apState(E, no) ~= "idle" then return nil end
+  elseif not addr:match("^Group ") then
+    return nil
+  end
+  local ap = blackAp(E, made)
+  if ap then
+    E.C("Assign Appearance %d At %s", ap, addr)
+    pcall(function() e.VisibilityBorder = false end)
+    if mark then mark() end
+  end
+  return nil
+end
+
 -- one button: returns true when it got its icon
 local function iconButton(E, maps, made, keep, e, iconed)
   local o, text
@@ -11325,10 +11369,14 @@ local function iconButton(E, maps, made, keep, e, iconed)
   pcall(function() kind = tostring(o:GetClass()) end)
   pcall(function() no = tonumber(o.no) or tonumber(o.No) end)
   pcall(function() name = tostring(E.objName(o) or "") end)
+  if kind == "Group" and no and not keep then return plainButton(E, made, e, kind .. " " .. no, nil) end
   if not (kind == "Sequence" or kind == "Macro") or not no or not name then return nil end
   if name:sub(1, #E.CFG.PREFIX + 1) ~= E.CFG.PREFIX .. " " then return nil end
   local label, icon = iconOf(E, maps, kind, text and tostring(text) or "", name)
-  if not icon then return nil end
+  if not icon then
+    if not keep and kind == "Macro" then return plainButton(E, made, e, kind .. " " .. no, iconed and function() iconed[no] = {plain = true} end) end
+    return nil
+  end
   local top = icon:sub(1, 2) == "t:"
   if keep and icon:sub(1, 3) == "sw:" then return nil end   -- (colour buttons keep their look)
   local own = keep or top          -- the button's own colours, with the icon on them
@@ -11396,7 +11444,10 @@ local function fixCommand(E, made, keep, iconed, c)
   for i, m in ipairs(M) do
     local a = #A == 1 and A[1] or A[i]
     local ic = iconed[m]
-    if ic then
+    if ic and ic.plain then
+      local new = apState(E, a) == "idle" and blackAp(E, made)
+      if new and new ~= a then a = new changed = true end
+    elseif ic then
       local new = ic.own and colourAp(E, made, ic.icon, apColour(E, a), not keep) or (not ic.own and discAp(E, apState(E, a), ic.icon, ic.label))
       if new and new ~= a then a = new changed = true end
     end

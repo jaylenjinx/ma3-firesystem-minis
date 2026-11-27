@@ -94,6 +94,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li><a href="#los">FS LOS</a></li>
         <li><a href="#masters">FS Masters</a></li>
         <li><a href="#icons">FS Icons</a></li>
+        <li><a href="#utility">FS Utility</a></li>
       </ul>
       <h4>More</h4>
       <ul>
@@ -124,6 +125,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <a class="card" href="#los"><b>FS LOS</b><span>Live Output System bumps, StartShow style</span></a>
       <a class="card" href="#masters"><b>FS Masters</b><span>FireSystem&#39;s executor page 1: keys, group masters, speed masters</span></a>
       <a class="card" href="#icons"><b>FS Icons</b><span>FireSystem&#39;s icons on the other tools&#39; buttons</span></a>
+      <a class="card" href="#utility"><b>FS Utility</b><span>Reimport the tools, run them all again, or delete what they made</span></a>
     </div>
 
     <h2 id="install">Install</h2>
@@ -266,8 +268,20 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>Run it after the other tools. Buttons get round icon discs, dark when off and lit when on, without text: FireSystem&#39;s own, plus new ones for the rest (the extra tilts, sizes, LOS bumps, the colour swatches and tints, step counts, Steps, Master, Colour, Focus, Frost).</li>
         <li>Value buttons whose text changes (Wings, Fade, Delay, Speed, Phase, STEP 1&ndash;5, LOS timing ...) keep their colours and text, with an icon above it.</li>
         <li>Tick <i>Keep each button&#39;s colour and text</i> to keep every button&#39;s colours and text, with the square icon on top.</li>
-        <li>Group buttons keep their text. Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
+        <li>Group buttons keep their text and go black when off, like the rest. Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
         <li>Every image is inside FSIcons.lua: nothing else to copy. Run it again after rebuilding a tool; to go back to plain buttons, rebuild that tool.</li>
+      </ul>
+    </section>
+
+    <section class="tool" id="utility">
+      <h2>FS Utility</h2>
+      <p class="file">FSUtility.xml</p>
+      <ul class="points">
+        <li><b>Reimport from console:</b> imports every FS tool&#39;s XML in <code>gma3_library/datapools/plugins</code> into the Plugins pool again. A tool already there is replaced in its own slot; a new one goes in the first free slot.</li>
+        <li><b>Reimport from USB:</b> the same from a stick. It looks in <code>grandMA3/gma3_library/datapools/plugins</code>, <code>gma3_library/datapools/plugins</code>, <code>FireSystemMinis/</code> and the stick&#39;s top folder, or in the folder you type in <i>USB folder</i>.</li>
+        <li><b>Re-run all:</b> builds every tool already built in this show again with its last settings and no dialogs, FS Presets first and FS Icons last. Each tool takes the argument <code>rebuild</code>, so <code>Plugin "FS LOS" "rebuild"</code> works in a macro too.</li>
+        <li><b>Delete all</b> (asks first): deletes everything the tools made: their layouts, sequences, macros, MAtricks, presets and appearances, FS Icons&#39; images, FS Masters&#39; faders and the tools&#39; settings. Two boxes, off by default, also delete what the main FireSystem plugin shares: FS Presets&#39; presets and FireSystem&#39;s icon discs and images.</li>
+        <li>FS Utility doesn&#39;t reimport itself: import a new copy of it by hand.</li>
       </ul>
     </section>
 

@@ -321,3 +321,69 @@ test("FireSystem look: value buttons with a top icon sit on black, not grey", fu
   t.ok(m, "no Fade input")
   t.ok((apName(stub, m) or ""):find("^FS IC t:fade 0%.0%.0$"), tostring(apName(stub, m)))
 end)
+
+-- buttons with no icon of their own (the group buttons): black, not grey, in the FireSystem look
+local function blackish(stub, addr)
+  local n = stub.ap[addr]
+  return n and stub.objects["Appearance " .. n] == "FS IC plain 0.0.0"
+end
+local function layoutGroups(stub)
+  local l = {}
+  for p in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        if e.what and e.what:match("^Group %d+$") then l[#l + 1] = e end
+      end
+    end
+  end
+  return l
+end
+
+test("FireSystem look: group buttons go black and keep their names", function()
+  local stub = all()
+  run(stub)
+  local gs = layoutGroups(stub)
+  t.ok(#gs > 0, "no group buttons")
+  t.ok(blackish(stub, "Group 1"), "Group 1: " .. tostring(apName(stub, "Group 1")))
+  t.ok(blackish(stub, "Group 2"), "Group 2: " .. tostring(apName(stub, "Group 2")))
+  for _, e in ipairs(gs) do t.ok(e.CustomTextText ~= "", "group button lost its text") end
+end)
+
+test("FireSystem look: FS LOS's group toggles are black when off, still lit when on", function()
+  local stub = all()
+  run(stub)
+  local m = named(stub, "Macro", "FS LO LOS1 Group 1")
+  t.ok(m, "no LOS group toggle")
+  t.ok(blackish(stub, m), tostring(apName(stub, m)))
+  local no = tonumber(m:match("%d+"))
+  local cmds = {}
+  for i = 1, 99 do
+    local ok, c = pcall(function() return stub.G.ObjectList(m)[1][i].Command end)
+    if not ok or not c then break end
+    cmds[#cmds + 1] = c
+  end
+  local black = stub.ap[m]
+  local offLine, onLine
+  for _, c in ipairs(cmds) do
+    if c:find("Assign Appearance " .. black .. " At Macro " .. no, 1, true) then offLine = true end
+    local a = c:match("^Assign Appearance (%d+) At Macro " .. no .. "$")
+    if a and tonumber(a) ~= black then
+      local nm = stub.objects["Appearance " .. a]
+      if type(nm) == "string" and nm:find("group on$") then onLine = true end
+    end
+  end
+  t.ok(offLine, "the off line doesn't go back to black: " .. table.concat(cmds, " | "))
+  t.ok(onLine, "the on line lost its lit look: " .. table.concat(cmds, " | "))
+end)
+
+test("group buttons keep their look with Keep colour, or when the group has its own appearance", function()
+  local stub = all()
+  run(stub, true)
+  t.ok(not blackish(stub, "Group 1"), "keep look: Group 1 went black")
+  local s2 = all()
+  s2.objects["Appearance 77"] = "My blue"
+  s2.ap["Group 2"] = 77
+  run(s2)
+  t.eq(s2.ap["Group 2"], 77, "Group 2's own appearance was replaced")
+  t.ok(blackish(s2, "Group 1"), "Group 1 not black")
+end)
