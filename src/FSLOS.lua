@@ -158,6 +158,10 @@ local function losPresets(E, groups)
   return lists, slots, slotAt, cols, made, foreign
 end
 
+-- a typed time in a command: MA's command line reads ".5" as a stray dot (Lyn 2026-11-22: 0.5
+-- works, .5 errors), so the variable goes in with a 0 in front (.5 -> 0.5, 2 -> 02)
+local function losNum(var) return "0$" .. var end
+
 local function setWait(E, M, line, wait)
   local ok = pcall(function() E.obj("Macro " .. M)[line]:Set("Wait", wait) end)
   if not ok then E.Cany({ string.format('Set Macro %d.%d Property "Wait" "%s"', M, line, wait) }) end
@@ -345,7 +349,7 @@ local function buildLOS(E, groups, o)
     btn(B .. "Fade 0", "Fade 0", TC0, 0, AP.idle, function() return {setAll({{"FadeFromX", '"None"'}, {"FadeToX", '"None"'}}),
       fadeT and string.format('Set Layout %d.%d Property "CustomTextText" "Fade"', L, fadeT.idx) or nil} end, true)
     fadeT = btn(B .. "Fade input", "Fade", TC0 + 1, 0, AP.idle, function(me)
-      return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", "$" .. V("fade")}, {"FadeToX", "$" .. V("fade")}}), me.idx) end)
+      return input(V("fade"), "LOS " .. b .. " Fade", setAll({{"FadeFromX", losNum(V("fade"))}, {"FadeToX", losNum(V("fade"))}}), me.idx) end)
     btn(B .. "Wings 0", "Wings 0", TC0 + 2.25, 0, AP.idle, function() return {setAll({{"XWings", '"None"'}})} end, true)
     btn(B .. "Wings 2", "Wings 2", TC0 + 3.25, 0, AP.idle, function() return {setAll({{"XWings", '"2"'}})} end)
     -- Blocks: XBlock on every MAtricks of the bank (fixtures in blocks of n act as one)
@@ -358,7 +362,7 @@ local function buildLOS(E, groups, o)
       return {string.format('Set MAtricks %d Thru %d Property "DelayFromX" "None" "DelayToX" "None"', A, Bm),
               delayT and string.format('Set Layout %d.%d Property "CustomTextText" "Delay"', L, delayT.idx) or nil} end, true)
     delayT = btn(B .. "Delay input", "Delay", TC0 + 1, 1, AP.idle, function(me)
-      local v = "$" .. V("delay")
+      local v = losNum(V("delay"))
       return input(V("delay"), "LOS " .. b .. " Delay",
         string.format('Set MAtricks %d Property "DelayFromX" "0" "DelayToX" %s; Set MAtricks %d Property "DelayFromX" %s "DelayToX" "0"', A, v, Bm, v), me.idx) end)
     local chase = s0 + #BUMPS - 1
@@ -366,7 +370,7 @@ local function buildLOS(E, groups, o)
       return {string.format("Set CueFade 0 Sequence %s Cue OffCue; Set CueFade 0 Sequence %d Cue 1 Thru 3", sAll, chase),
               offT and string.format('Set Layout %d.%d Property "CustomTextText" "Off"', L, offT.idx) or nil} end, true)
     offT = btn(B .. "Off input", "Off", TC0 + 3.25, 1, AP.idle, function(me)
-      local v = "$" .. V("off")
+      local v = losNum(V("off"))
       return input(V("off"), "LOS " .. b .. " Off Time",
         string.format("Set CueFade %s Sequence %s Cue OffCue; Set CueFade %s Sequence %d Cue 1 Thru 3", v, sAll, v, chase), me.idx) end)
 
