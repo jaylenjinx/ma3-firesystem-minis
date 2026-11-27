@@ -33,8 +33,27 @@ def include(m):
     return open(path, encoding="utf-8").read().rstrip() + "\n"
 
 
+def icon_data():
+    """FS Icons' images in one table: FireSystem's (firesystem/FireSystemIcons.lua, as the main
+    plugin ships them) plus FS Icons' own (icons/mini/, made by tools/make_icons.py), and the
+    order its own images are numbered in"""
+    import base64
+    fs = open(os.path.join(ROOT, "firesystem", "FireSystemIcons.lua"), encoding="utf-8").read()
+    lines = ["local ICON_DATA = {}"]
+    lines += ["ICON_DATA" + l[1:] for l in fs.splitlines() if l.startswith('D["fs_')]
+    order = [l.strip() for l in open(os.path.join(ROOT, "icons", "mini", "order.txt")) if l.strip()]
+    for f in order:
+        b = base64.b64encode(open(os.path.join(ROOT, "icons", "mini", f), "rb").read()).decode()
+        lines.append('ICON_DATA["%s"] = "%s"' % (f, b))
+    lines.append("local MINI_FILES = {" + ", ".join('"%s"' % f for f in order) + "}")
+    return "\n".join(lines) + "\n"
+
+
 def build(src):
     text = open(src, encoding="utf-8").read()
+    # FS Icons: the icon images (--@ICONDATA@)
+    if "--@ICONDATA@" in text:
+        text = text.replace("--@ICONDATA@", icon_data(), 1)
     # shared tool code: --@INCLUDE name@ -> src/lib/name.lua (before the modules go in)
     text = re.sub(r"^--@INCLUDE (\w+)@$", include, text, flags=re.M)
     if "--@MODULES@" not in text:

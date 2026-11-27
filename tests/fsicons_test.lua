@@ -74,7 +74,7 @@ test("Keep look: same colours, the square icon on top, text kept", function()
   run(stub, true)
   local n = stub.ap[s]
   t.ok(apName(stub, s):find("^FS IC sine1 "), apName(stub, s))
-  t.ok(n >= 3001, "appearance " .. n)
+  t.ok(n >= 9501, "appearance " .. n)
   t.eq(stub.rgb[n], before)
   t.eq(element(stub, s).CustomTextText, beforeText)
   t.ok(stub.objects["Image 3.216"], "sine1 image not imported")
@@ -113,12 +113,12 @@ test("someone else's appearance in a disc slot is left alone, and that button ke
   t.ok(msg:find("kept their text"), msg)
 end)
 
-test("without any images: says where to put FireSystemIcons.lua, buttons untouched", function()
+test("when no image can be imported: says so, buttons untouched", function()
   local stub = built("FSDimmerFX", false)
   local s = seqNamed(stub, "FS DF Front Sine 1")
   local text = element(stub, s).CustomTextText
   local msg = run(stub)
-  t.ok(msg:find("FireSystemIcons.lua", 1, true), msg)
+  t.ok(msg:find("No icon images could be imported", 1, true), msg)
   t.eq(element(stub, s).CustomTextText, text)
 end)
 
@@ -139,4 +139,81 @@ test("after every tool in one show: no errors, every tool's layout gets icons", 
   t.ok(not msg:find("Stopped"), msg)
   local n, layouts = msg:match("^(%d+) buttons on (%d+) layouts")
   t.ok(n and tonumber(layouts) >= 5, msg)
+end)
+
+-- the buttons FireSystem has no icon for: this tool's own
+local function all()
+  local stub = ma.new()
+  stub.objects["Group 1"], stub.objects["Group 2"] = "Front", "Back"
+  stub.images = true
+  for _, tool in ipairs({"FSPresets", "FSDimmerFX", "FSColourFX", "FSColourPicker", "FSPositionPicker", "FSBumps", "FSGoboBeam", "FSLOS"}) do
+    local main = assert(loadfile("plugins/" .. tool .. ".lua", "t", stub.G))(tool, {}, nil)
+    main(nil, "")
+  end
+  return stub
+end
+local function named(stub, kind, label)
+  for p, v in pairs(stub.objects) do if v == label and p:match("^" .. kind .. " %d+$") then return p end end
+end
+
+test("own discs: extra tilts, sizes, LOS bumps, swatches, tints, step counts, Master, Focus", function()
+  local stub = all()
+  run(stub)
+  local want = {
+    {"Sequence", "FS PP Front Tilt -90", "FS ic m_tilt_m90_i"},
+    {"Sequence", "FS PP Front Tilt 75", "FS ic m_tilt_75_i"},
+    {"Sequence", "FS LO LOS1 All >", "FS ic m_los_right_i"},
+    {"Sequence", "FS LO LOS1 Chase", "FS ic m_los_chase_i"},
+    {"Sequence", "FS BS Front Steps", "FS ic m_steps_i"},
+  }
+  for _, w in ipairs(want) do
+    local p = named(stub, w[1], w[2])
+    t.ok(p, "no " .. w[2])
+    t.eq(apName(stub, p), w[3], w[2])
+    t.ok(stub.ap[p .. " Cue 1"] == nil or (apName(stub, p .. " Cue 1") or ""):find("_o$"), w[2] .. " cue not lit")
+  end
+  -- a swatch: Red's dark disc off, its bright one on
+  local red
+  for p, v in pairs(stub.objects) do if p:match("^Sequence %d+$") and type(v) == "string" and v:find("^FS CP Front ") and v:find(" Red$") then red = p end end
+  t.ok(red, "no Red button")
+  t.eq(apName(stub, red), "FS ic sw_red_i")
+  -- the images are this tool's, from Image 3.3101 on
+  t.ok(stub.objects["Image 3.3101"] or stub.objects["Image 3.3102"], "no own images imported")
+end)
+
+test("value buttons keep their text, at the bottom, with a top icon in their own colours", function()
+  local stub = all()
+  run(stub)
+  local found = {}
+  for p, v in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        local a = e.what and stub.ap[e.what] and stub.objects["Appearance " .. stub.ap[e.what]]
+        if type(a) == "string" and a:find("^FS IC t:") then
+          t.eq(e.CustomTextAlignmentV, "Bottom", e.what)
+          t.ok(e.CustomTextText and e.CustomTextText ~= "", e.what .. " lost its text")
+          found[a:match("^FS IC t:(%S+)")] = true
+        end
+      end
+    end
+  end
+  for _, k in ipairs({"wings", "fade", "delay", "speed", "phase", "group", "block", "offtime", "hold", "fadeout", "edit", "stepcount", "step1", "sym", "part"}) do
+    t.ok(found[k], "no " .. k .. " top icon")
+  end
+end)
+
+test("only group buttons (and FS LOS's group toggles) are left with plain text", function()
+  local stub = all()
+  run(stub)
+  local plain = {}
+  for p, v in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        local a = e.what and stub.ap[e.what] and stub.objects["Appearance " .. stub.ap[e.what]]
+        local iconed = type(a) == "string" and (a:find("^FS IC ") or a:find("^FS ic ") or a:find("^FS r ") or a:find("^FS n "))
+        if e.what and not e.what:match("^Group") and not iconed then plain[#plain + 1] = (e.CustomTextText or "?") end
+      end
+    end
+  end
+  for _, txt in ipairs(plain) do t.ok(txt == "Front" or txt == "Back", "still plain: " .. txt) end
 end)

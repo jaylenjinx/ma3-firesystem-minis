@@ -50,7 +50,6 @@ jobs:
         run: |
           mkdir -p dist/FireSystemMinis
           cp plugins/FS*.lua plugins/FS*.xml dist/FireSystemMinis/
-          cp firesystem/FireSystemIcons.lua dist/FireSystemMinis/   # FS Icons' images (no import needed)
           for x in dist/FireSystemMinis/*.xml; do
             sed -i -E "s/(<Plugin [^>]*Version=\")[^\"]*\"/\1${NUM}\"/" "$x"
           done
@@ -68,13 +67,12 @@ jobs:
           \`FireSystemMinis-${NUM}.zip\`) into \`gma3_library/datapools/plugins/\`
           (onPC: \`~/MALightingTechnology/gma3_library/datapools/plugins/\`, console: a USB stick with the same folders),
           then import each tool's XML into the Plugins pool and click it once to build.
-          For FS Icons, copy \`FireSystemIcons.lua\` into the same folder too (it doesn't need importing).
           NOTES
           prerelease=""
           [[ "$TAG" == *-* ]] && prerelease="--prerelease"
           gh release create "$TAG" --target "$GITHUB_SHA" --title "FireSystem Minis $NUM" \
             --notes-file notes.md --generate-notes $prerelease \
-            "dist/FireSystemMinis-${NUM}.zip" dist/FS*.lua dist/FS*.xml dist/FireSystemIcons.lua
+            "dist/FireSystemMinis-${NUM}.zip" dist/FS*.lua dist/FS*.xml
 
       - name: Update the README's latest version
         if: ${{ !contains(steps.ver.outputs.tag, '-') }}
