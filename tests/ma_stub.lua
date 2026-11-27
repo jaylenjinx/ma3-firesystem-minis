@@ -45,7 +45,11 @@ function M.new()
   -- commands keep the table up to date, so a tool sees what it made (a layout counts the
   -- elements assigned to it)
   local handles = {}
-  local function handle(path)
+  -- (an object's appearance: stub.ap["Sequence 5 Cue 1"] = 3001, set by Assign Appearance;
+  -- an appearance's colour: stub.rgb[3001] = {r, g, b}, set by its BackR / BackG / BackB)
+  stub.ap, stub.rgb = {}, {}
+  local handle
+  function handle(path)
     local o = stub.objects[path]
     if not o then return nil end
     local h = handles[path]
@@ -54,10 +58,15 @@ function M.new()
       h.Count = function(self) return #self.elements end
       h.Delete = function(self, i) table.remove(self.elements, i) end
       h.Children = function(self) return self.elements end
+      h.GetClass = function() return path:match("^(%a+)") end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
         if k == "name" or k == "Name" then local v = stub.objects[path] return type(v) == "string" and v or path end
-        if k == "no" then return tonumber(path:match("(%d+)$")) end
+        if k == "no" or k == "No" then return tonumber(path:match("(%d+)$")) end
+        if k == "Appearance" then return stub.ap[path] and handle("Appearance " .. stub.ap[path]) end
+        local rgb = stub.rgb[tonumber(path:match("^Appearance (%d+)$"))]
+        if rgb and k == "BackR" then return rgb[1] elseif rgb and k == "BackG" then return rgb[2]
+        elseif rgb and k == "BackB" then return rgb[3] end
       end})
       handles[path] = h
     end
@@ -89,15 +98,21 @@ function M.new()
   local function track(c)
     local kind, no = c:match("^Store (%a+) ([%d.]+)")
     if kind and not stub.objects[kind .. " " .. no] then stub.objects[kind .. " " .. no] = true end
+    local sq, cue = c:match("^Store Sequence (%d+) Cue (%d+)")
+    if sq then stub.objects["Sequence " .. sq .. " Cue " .. cue] = true end
+    local apn, at = c:match("^Assign Appearance (%d+) At (.-)$")
+    if apn then stub.ap[at] = tonumber(apn) end
+    local rn, r, g, b = c:match('^Set Appearance (%d+) Property "BackR" (%d+) "BackG" (%d+) "BackB" (%d+)')
+    if rn then stub.rgb[tonumber(rn)] = {tonumber(r), tonumber(g), tonumber(b)} end
     local lk, lno, name = c:match('^Label (%a+) ([%d.]+) "(.*)"$')
     if lk then stub.objects[lk .. " " .. lno] = name end
     local dk, dno = c:match("^Delete (%a+) ([%d.]+)")
     if dk and not c:find("Thru") then stub.objects[dk .. " " .. dno] = nil handles[dk .. " " .. dno] = nil end
     local img = c:match("^Import Image ([%d.]+) ")   -- (an import finds its file: the image exists)
     if img and stub.images then stub.objects["Image " .. img] = true end
-    local L = c:match("^Assign .- At Layout (%d+)$")
+    local what, L = c:match("^Assign (.-) At Layout (%d+)$")
     local lh = L and handle("Layout " .. L)
-    if lh then lh.elements[#lh.elements + 1] = {} end
+    if lh then lh.elements[#lh.elements + 1] = {Object = handle(what), what = what} end
   end
   G.Cmd = function(c) stub.cmds[#stub.cmds + 1] = c track(c) return "Ok" end
   -- MessageBox answers with its first button and the inputs / states it was given (as if the user
