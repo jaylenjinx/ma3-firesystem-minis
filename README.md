@@ -1,6 +1,6 @@
 # FireSystem Minis: single-purpose grandMA3 tools
 
-**Latest version: v1.9.0**
+**Latest version: v1.10.0**
 
 **Site:** https://ma3-firesystem-minis.sulfurdesign.com/
 
