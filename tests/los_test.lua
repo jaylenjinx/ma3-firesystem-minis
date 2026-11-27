@@ -52,3 +52,10 @@ test("FS LOS: the old option macros are gone; colours and group toggles stay mac
   t.ok(labelled(stub, "FS LO LOS1 Color Off", "Macro"), "no Color Off macro")
   t.ok(labelled(stub, "FS LO LOS1 Group 1", "Macro"), "no group toggle")
 end)
+
+test("FS LOS: a typed time goes in with a 0 in front, so .5 reads as 0.5 (MA's command line needs the digit)", function()
+  local _, main = ma.load("FSLOS")
+  local num = ma.find(main, "losNum")
+  t.ok(num, "no losNum")
+  t.eq(num("FSLO_b1_fade"), "0$FSLO_b1_fade")
+end)
