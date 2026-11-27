@@ -70,3 +70,31 @@ test("FS LOS: typed times go in as $var, and a Lua line first turns .5 into 0.5"
     t.eq(vars.FSLO_b1_off, c[2], "typed " .. c[1])
   end
 end)
+
+test("FS LOS: All < gets its delay backwards in commands where the typed $var comes last", function()
+  local stub = build()
+  local m = labelled(stub, "FS LO LOS1 Delay input", "Macro")
+  t.ok(m, "no Delay input macro")
+  local h = stub.G.ObjectList("Macro " .. m)[1]
+  local seen = {}
+  for _, line in ipairs(h.elements) do
+    for c in (line.Command .. ";"):gmatch("%s*(.-);") do
+      if c:find("$", 1, true) and c:find("^Set MAtricks") then
+        -- (Forwards, with $var last, works in MA; backwards had it in the middle and did nothing)
+        t.ok(c:find("%$[%w_]+$"), "$var not last: " .. c)
+        local no, prop = c:match('^Set MAtricks (%d+) Property "(%w+)"')
+        seen[no .. prop] = c
+      end
+      local no, prop = c:match('^Set MAtricks (%d+) Property "(%w+)" "0"$')
+      if no then seen[no .. prop .. "0"] = c end
+    end
+  end
+  local A, B
+  for k in pairs(seen) do
+    local no = k:match("^(%d+)DelayToX$") if no then A = no end
+    no = k:match("^(%d+)DelayFromX$") if no then B = no end
+  end
+  t.ok(A and B and A ~= B, "no forwards / backwards MAtricks: " .. t.fmt(seen))
+  t.ok(seen[A .. "DelayFromX0"], "All > doesn't start at 0")
+  t.ok(seen[B .. "DelayToX0"], "All < doesn't end at 0")
+end)

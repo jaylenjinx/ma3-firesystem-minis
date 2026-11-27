@@ -9906,6 +9906,29 @@ local function defaultGroups(E, var1)
   return #t > 0 and E.rangeList(t) or "1 Thru 8"
 end
 
+
+-- A tool's entry point (`return rerunnable(main)`). Run with the argument "rebuild" (FS Utility's
+-- Re-run all: Plugin "FS LOS" "rebuild") it builds again with no popups: every dialog is answered
+-- with its first button (Build / Apply) and the values it offers, which are the last run's.
+local function autoAnswer(t)
+  local r = {result = t and t.commands and t.commands[1] and t.commands[1].value or 1, inputs = {}, states = {}}
+  for _, i in ipairs(t and t.inputs or {}) do r.inputs[i.name] = i.value end
+  for _, st in ipairs(t and t.states or {}) do r.states[st.name] = st.state end
+  return r
+end
+local function rerunnable(main)
+  return function(displayHandle, argument)
+    if tostring(argument or ""):lower() ~= "rebuild" then return main(displayHandle, argument) end
+    Printf(TITLE .. ": rebuilding with the last run's settings")
+    local had = rawget(G, "MessageBox")
+    local function put(v) if not pcall(rawset, G, "MessageBox", v) then G.MessageBox = v end end
+    put(autoAnswer)
+    local ok, err = pcall(main, displayHandle, argument)
+    put(had)
+    if not ok then error(err, 0) end
+  end
+end
+
 -- FS tools library "presets": the FS Presets plan (every preset, numbered from 1 per pool) and store
 
 -- which family a preset belongs to (the full plugin's numbering, read from its own tables)
@@ -10783,7 +10806,10 @@ local function buildLOS(E, groups, o)
     delayT = btn(B .. "Delay input", "Delay", TC0 + 1, 1, AP.idle, function(me)
       local v = losNum(V("delay"))
       return input(V("delay"), "LOS " .. b .. " Delay",
-        string.format('Set MAtricks %d Property "DelayFromX" "0" "DelayToX" %s; Set MAtricks %d Property "DelayFromX" %s "DelayToX" "0"', A, v, Bm, v), me.idx) end)
+        -- (one property per command, $var last: forwards had it last and worked, backwards had it
+        -- in the middle of the line and All < got no delay, Lyn 2026-11-27)
+        string.format('Set MAtricks %d Property "DelayFromX" "0"; Set MAtricks %d Property "DelayToX" %s; ' ..
+                      'Set MAtricks %d Property "DelayToX" "0"; Set MAtricks %d Property "DelayFromX" %s', A, A, v, Bm, Bm, v), me.idx) end)
     local chase = s0 + #BUMPS - 1
     btn(B .. "Off 0", "Off 0", TC0 + 2.25, 1, AP.idle, function()
       return {string.format("Set CueFade 0 Sequence %s Cue OffCue; Set CueFade 0 Sequence %d Cue 1 Thru 3", sAll, chase),
@@ -10860,4 +10886,4 @@ local function main(displayHandle, argument)
   pcall(Cmd, "Select Layout " .. o.L)
 end
 
-return main
+return rerunnable(main)

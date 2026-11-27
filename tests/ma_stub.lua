@@ -58,6 +58,13 @@ function M.new()
       h.Count = function(self) return #self.elements end
       h.Delete = function(self, i) table.remove(self.elements, i) end
       h.Children = function(self) return self.elements end
+      -- (a macro's lines: Append adds one, line.Command is its command)
+      h.Append = function(self)
+        local line = {Command = ""}
+        line.Set = function(l, k, v) l[k] = v end
+        self.elements[#self.elements + 1] = line
+        return line
+      end
       h.GetClass = function() return path:match("^(%a+)") end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
@@ -73,6 +80,18 @@ function M.new()
     return h
   end
   G.ObjectList = function(path)
+    -- in a pool by name: Preset 4."FS "* = every Color preset whose name starts so
+    local pk, pool, pre = path:match('^(%a+) (%d+)%."(.*)"%*$')
+    if pk then
+      local l = {}
+      local head = pk .. " " .. pool .. "."
+      for p, v in pairs(stub.objects) do
+        if type(v) == "string" and v:sub(1, #pre) == pre and p:sub(1, #head) == head then l[#l + 1] = {p, handle(p)} end
+      end
+      table.sort(l, function(a, b) return a[1] < b[1] end)
+      for i, x in ipairs(l) do l[i] = x[2] end
+      return l
+    end
     -- by name: Sequence "FS BS Front Bump"; Sequence "FS DF Front "* = every name starting so
     local wk, prefix = path:match('^(%a+) "(.*)"%*$')
     if wk then
@@ -112,6 +131,8 @@ function M.new()
     if dk and not c:find("Thru") then stub.objects[dk .. " " .. dno] = nil handles[dk .. " " .. dno] = nil end
     local img = c:match("^Import Image ([%d.]+) ")   -- (an import finds its file: the image exists)
     if img and stub.images then stub.objects["Image " .. img] = true end
+    local pl = c:match("^Import Plugin (%d+) ")   -- (an imported plugin exists)
+    if pl then stub.objects["Plugin " .. pl] = stub.objects["Plugin " .. pl] or true end
     local what, L = c:match("^Assign (.-) At Layout (%d+)$")
     local lh = L and handle("Layout " .. L)
     if lh then lh.elements[#lh.elements + 1] = {Object = handle(what), what = what} end
@@ -147,6 +168,12 @@ function M.load(tool)
   local main = chunk(tool, {}, nil)
   assert(type(main) == "function", tool .. ".lua did not return its main function")
   return stub, main
+end
+
+-- Loads plugins/<tool>.lua into an existing stub (two plugins in one show). Returns its main.
+function M.loadInto(stub, tool)
+  local chunk = assert(loadfile("plugins/" .. tool .. ".lua", "t", stub.G))
+  return chunk(tool, {}, nil)
 end
 
 -- every tool in plugins/ (FS<Tool>.lua), from the XML files

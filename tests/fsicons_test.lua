@@ -236,3 +236,154 @@ test("a picker's Off step shows the dark disc, its other steps the lit one", fun
   end
   t.ok(checked > 0, "no Gobo Beam picker with an Off step got a disc")
 end)
+
+-- runs a macro's "Assign Appearance <aps> At Macro <list>" lines the way MA would
+local function expand(s)
+  local l = {}
+  for part in s:gmatch("[^+]+") do
+    local a, b = part:match("^%s*(%d+) Thru (%d+)%s*$")
+    if a then for k = tonumber(a), tonumber(b) do l[#l + 1] = k end
+    else l[#l + 1] = tonumber(part:match("^%s*(%d+)%s*$")) end
+  end
+  return l
+end
+local function press(stub, macroAddr)
+  local h = stub.G.ObjectList(macroAddr)[1]
+  for _, line in ipairs(h.elements) do
+    for c in (line.Command .. ";"):gmatch("%s*(.-);") do
+      local aps, ms = c:match("^Assign Appearance (.-) At Macro (.+)$")
+      if aps then
+        local A, M = expand(aps), expand(ms)
+        for i, m in ipairs(M) do stub.ap["Macro " .. m] = (#A == 1) and A[1] or A[i] end
+      end
+    end
+  end
+end
+
+test("radio buttons keep their icons after a tap: Normal / Pastel / Dark, Steps, Small / Mid / Big", function()
+  local stub = all()
+  run(stub)
+  for _, set in ipairs({{"FS CP Front ", {"Normal", "Pastel", "Dark"}, "tint_"},
+                        {"FS CF Front ", {"2 Steps", "3 Steps"}, "steps"},
+                        {"FS PP Front FX ", {"Small", "Mid", "Big"}, "size_"}}) do
+    local ms = {}
+    for i, n in ipairs(set[2]) do ms[i] = named(stub, "Macro", set[1] .. n) t.ok(ms[i], "no " .. set[1] .. n) end
+    for i = 1, #ms do
+      press(stub, ms[i])
+      for j = 1, #ms do
+        local a = apName(stub, ms[j]) or "?"
+        t.ok(a:find("^FS ic m_" .. set[3]), set[1] .. set[2][j] .. " lost its icon after a tap on " .. set[2][i] .. ": " .. a)
+        t.ok(a:find(i == j and "_o$" or "_i$"), set[1] .. set[2][j] .. " wrong state after a tap on " .. set[2][i] .. ": " .. a)
+      end
+    end
+  end
+end)
+
+test("radio buttons in the keep look keep their square icon after a tap", function()
+  local stub = all()
+  run(stub, true)
+  local ms = {named(stub, "Macro", "FS CP Front Normal"), named(stub, "Macro", "FS CP Front Pastel")}
+  press(stub, ms[2])
+  for _, m in ipairs(ms) do t.ok((apName(stub, m) or ""):find("^FS IC m:tint_"), m .. ": " .. tostring(apName(stub, m))) end
+end)
+
+test("LOS colour buttons keep their swatch discs after a tap", function()
+  local stub = all()
+  run(stub)
+  local red, blue = named(stub, "Macro", "FS LO LOS1 Color Red"), named(stub, "Macro", "FS LO LOS1 Color Blue")
+  t.ok(red and blue, "no LOS colour macros")
+  press(stub, red)
+  t.eq(apName(stub, red), "FS ic sw_red_o")
+  t.eq(apName(stub, blue), "FS ic sw_blue_i")
+end)
+
+test("icon buttons have no border", function()
+  local stub = all()
+  run(stub)
+  local n = 0
+  for p in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        local a = e.what and apName(stub, e.what)
+        if type(a) == "string" and a:find("^FS [Iirn][Cc ]") then
+          t.eq(e.VisibilityBorder, false, e.what) n = n + 1
+        end
+      end
+    end
+  end
+  t.ok(n > 20, "only " .. n .. " icon buttons")
+end)
+
+test("FireSystem look: value buttons with a top icon sit on black, not grey", function()
+  local stub = all()
+  run(stub)
+  local m = named(stub, "Macro", "FS LO LOS1 Fade input")
+  t.ok(m, "no Fade input")
+  t.ok((apName(stub, m) or ""):find("^FS IC t:fade 0%.0%.0$"), tostring(apName(stub, m)))
+end)
+
+-- buttons with no icon of their own (the group buttons): black, not grey, in the FireSystem look
+local function blackish(stub, addr)
+  local n = stub.ap[addr]
+  return n and stub.objects["Appearance " .. n] == "FS IC plain 0.0.0"
+end
+local function layoutGroups(stub)
+  local l = {}
+  for p in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        if e.what and e.what:match("^Group %d+$") then l[#l + 1] = e end
+      end
+    end
+  end
+  return l
+end
+
+test("FireSystem look: group buttons go black and keep their names", function()
+  local stub = all()
+  run(stub)
+  local gs = layoutGroups(stub)
+  t.ok(#gs > 0, "no group buttons")
+  t.ok(blackish(stub, "Group 1"), "Group 1: " .. tostring(apName(stub, "Group 1")))
+  t.ok(blackish(stub, "Group 2"), "Group 2: " .. tostring(apName(stub, "Group 2")))
+  for _, e in ipairs(gs) do t.ok(e.CustomTextText ~= "", "group button lost its text") end
+end)
+
+test("FireSystem look: FS LOS's group toggles are black when off, still lit when on", function()
+  local stub = all()
+  run(stub)
+  local m = named(stub, "Macro", "FS LO LOS1 Group 1")
+  t.ok(m, "no LOS group toggle")
+  t.ok(blackish(stub, m), tostring(apName(stub, m)))
+  local no = tonumber(m:match("%d+"))
+  local cmds = {}
+  for i = 1, 99 do
+    local ok, c = pcall(function() return stub.G.ObjectList(m)[1][i].Command end)
+    if not ok or not c then break end
+    cmds[#cmds + 1] = c
+  end
+  local black = stub.ap[m]
+  local offLine, onLine
+  for _, c in ipairs(cmds) do
+    if c:find("Assign Appearance " .. black .. " At Macro " .. no, 1, true) then offLine = true end
+    local a = c:match("^Assign Appearance (%d+) At Macro " .. no .. "$")
+    if a and tonumber(a) ~= black then
+      local nm = stub.objects["Appearance " .. a]
+      if type(nm) == "string" and nm:find("group on$") then onLine = true end
+    end
+  end
+  t.ok(offLine, "the off line doesn't go back to black: " .. table.concat(cmds, " | "))
+  t.ok(onLine, "the on line lost its lit look: " .. table.concat(cmds, " | "))
+end)
+
+test("group buttons keep their look with Keep colour, or when the group has its own appearance", function()
+  local stub = all()
+  run(stub, true)
+  t.ok(not blackish(stub, "Group 1"), "keep look: Group 1 went black")
+  local s2 = all()
+  s2.objects["Appearance 77"] = "My blue"
+  s2.ap["Group 2"] = 77
+  run(s2)
+  t.eq(s2.ap["Group 2"], 77, "Group 2's own appearance was replaced")
+  t.ok(blackish(s2, "Group 1"), "Group 1 not black")
+end)

@@ -17,7 +17,10 @@
 
   Value buttons (Wings, Blocks, Groups, Phase, Delay, Fade, Speed, Sym, Part, Hold, Out, Edit Step,
   STEP 1-5, Step Count, FS LOS's timing) keep their text, which changes, with an icon above it in
-  the button's own colours. Group buttons keep their text. Appearance slots that hold something that
+  the button's own colours (FireSystem look: on black where the button was grey). Icon buttons lose
+  their border. Buttons that light one of a set (Normal / Pastel / Dark, 2 / 3 Steps, Small / Mid /
+  Big, FS LOS's colours) get their macro lines pointed at the icons, so a tap keeps them. Group buttons keep their text; buttons with no icon (groups, FS LOS's
+  group toggles) go black when off in the FireSystem look. Appearance slots that hold something that
   isn't FireSystem's ("FS ...") are left alone: that button keeps its text.
 
   The images are inside this plugin (FireSystem's, as its FireSystemIcons.lua has them, and this
@@ -9906,6 +9909,29 @@ local function defaultGroups(E, var1)
 end
 
 
+-- A tool's entry point (`return rerunnable(main)`). Run with the argument "rebuild" (FS Utility's
+-- Re-run all: Plugin "FS LOS" "rebuild") it builds again with no popups: every dialog is answered
+-- with its first button (Build / Apply) and the values it offers, which are the last run's.
+local function autoAnswer(t)
+  local r = {result = t and t.commands and t.commands[1] and t.commands[1].value or 1, inputs = {}, states = {}}
+  for _, i in ipairs(t and t.inputs or {}) do r.inputs[i.name] = i.value end
+  for _, st in ipairs(t and t.states or {}) do r.states[st.name] = st.state end
+  return r
+end
+local function rerunnable(main)
+  return function(displayHandle, argument)
+    if tostring(argument or ""):lower() ~= "rebuild" then return main(displayHandle, argument) end
+    Printf(TITLE .. ": rebuilding with the last run's settings")
+    local had = rawget(G, "MessageBox")
+    local function put(v) if not pcall(rawset, G, "MessageBox", v) then G.MessageBox = v end end
+    put(autoAnswer)
+    local ok, err = pcall(main, displayHandle, argument)
+    put(had)
+    if not ok then error(err, 0) end
+  end
+end
+
+
 -- the images (generated): ICON_DATA[file] = base64 PNG, FireSystem's and this tool's own;
 -- MINI_FILES = this tool's own, in the order of their image numbers
 local ICON_DATA = {}
@@ -11216,9 +11242,16 @@ local function colourOf(E, addr)
   return rgb
 end
 
--- an appearance with this colour and an image on it (keep look, top icons), or nil
-local function colourAp(E, made, icon, rgb)
+-- a dark neutral grey (the tools' idle buttons)
+local function darkGrey(rgb)
+  return math.max(rgb[1], rgb[2], rgb[3]) < 128 and math.max(rgb[1], rgb[2], rgb[3]) - math.min(rgb[1], rgb[2], rgb[3]) <= 12
+end
+
+-- an appearance with this colour and an image on it (keep look, top icons), or nil. black = a dark
+-- grey becomes black (FireSystem look: value buttons sit on black like the discs)
+local function colourAp(E, made, icon, rgb, black)
   if not rgb then return nil end
+  if black and darkGrey(rgb) then rgb = {0, 0, 0} end
   local kk, n = icon:match("^(%a+):(.+)$")
   if kk == "sw" then return nil end   -- (colour buttons already show their colour)
   local key = string.format("%s %d.%d.%d", icon, rgb[1], rgb[2], rgb[3])
@@ -11244,6 +11277,48 @@ local function colourAp(E, made, icon, rgb)
   return no
 end
 
+-- the plain black appearance (no image), for buttons with no icon of their own: FireSystem look
+-- puts their off look on black like the discs
+local function blackAp(E, made)
+  if made.black ~= nil then return made.black or nil end
+  local want = E.fs(TAG .. " plain 0.0.0")
+  local no
+  local l = ObjectList('Appearance "' .. want .. '"')
+  if l and l[1] then pcall(function() no = tonumber(l[1].no) end) end
+  if not no then
+    no = KEEP_AP_FROM
+    while E.obj("Appearance " .. no) and no < 9999 do no = no + 1 end
+    if no >= 9999 then made.black = false return nil end
+    E.C("Store Appearance %d /Overwrite", no)
+    E.C("Label Appearance %d %s", no, E.q(want))
+    E.setApColor(no, {0, 0, 0})
+  end
+  made.black = no
+  return no
+end
+
+-- an appearance's colour ({r, g, b}), or nil
+local function apColour(E, no)
+  local rgb
+  pcall(function()
+    local ap = E.obj("Appearance " .. no)
+    local r, g, b = tonumber(ap.BackR), tonumber(ap.BackG), tonumber(ap.BackB)
+    if r and g and b then rgb = {r, g, b} end
+  end)
+  return rgb
+end
+
+-- does this appearance mean off ("idle") or on? By its name (the tools' "... idle", "... off",
+-- "... dim"; the discs' "... idle" / "_i"), else by how bright it is
+local function apState(E, no)
+  local name = ""
+  pcall(function() name = tostring(E.objName(E.obj("Appearance " .. no)) or "") end)
+  if name:find("idle$") or name:find(" off$") or name:find(" dim$") or name:find("_i$") then return "idle" end
+  if name:find(" on$") or name:find(" lit$") or name:find("_o$") then return "on" end
+  local rgb = apColour(E, no)
+  return (rgb and math.max(rgb[1], rgb[2], rgb[3]) < 128) and "idle" or "on"
+end
+
 -- the tools' layouts: {{no, handle}, ...}
 local function toolLayouts(E)
   local found, seen = {}, {}
@@ -11261,8 +11336,31 @@ local function toolLayouts(E)
   return found
 end
 
+-- a button with no icon (group buttons, FS LOS's group toggles), FireSystem look: an off (dark)
+-- look goes black. A group's own appearance that isn't FireSystem's stays. Returns nil (no icon).
+local function plainButton(E, made, e, addr, mark)
+  local cur, name
+  pcall(function() cur = E.obj(addr).Appearance end)
+  if cur then
+    pcall(function() name = tostring(E.objName(cur) or "") end)
+    if not (name and name:sub(1, #E.CFG.PREFIX + 1) == E.CFG.PREFIX .. " ") then return nil end
+    local no
+    pcall(function() no = tonumber(cur.no) end)
+    if not no or apState(E, no) ~= "idle" then return nil end
+  elseif not addr:match("^Group ") then
+    return nil
+  end
+  local ap = blackAp(E, made)
+  if ap then
+    E.C("Assign Appearance %d At %s", ap, addr)
+    pcall(function() e.VisibilityBorder = false end)
+    if mark then mark() end
+  end
+  return nil
+end
+
 -- one button: returns true when it got its icon
-local function iconButton(E, maps, made, keep, e)
+local function iconButton(E, maps, made, keep, e, iconed)
   local o, text
   pcall(function() o = e.Object end)
   pcall(function() text = e.CustomTextText end)
@@ -11271,10 +11369,14 @@ local function iconButton(E, maps, made, keep, e)
   pcall(function() kind = tostring(o:GetClass()) end)
   pcall(function() no = tonumber(o.no) or tonumber(o.No) end)
   pcall(function() name = tostring(E.objName(o) or "") end)
+  if kind == "Group" and no and not keep then return plainButton(E, made, e, kind .. " " .. no, nil) end
   if not (kind == "Sequence" or kind == "Macro") or not no or not name then return nil end
   if name:sub(1, #E.CFG.PREFIX + 1) ~= E.CFG.PREFIX .. " " then return nil end
   local label, icon = iconOf(E, maps, kind, text and tostring(text) or "", name)
-  if not icon then return nil end
+  if not icon then
+    if not keep and kind == "Macro" then return plainButton(E, made, e, kind .. " " .. no, iconed and function() iconed[no] = {plain = true} end) end
+    return nil
+  end
   local top = icon:sub(1, 2) == "t:"
   if keep and icon:sub(1, 3) == "sw:" then return nil end   -- (colour buttons keep their look)
   local own = keep or top          -- the button's own colours, with the icon on them
@@ -11287,13 +11389,13 @@ local function iconButton(E, maps, made, keep, e)
       idle, lit = discAp(E, "idle", icon, label), discAp(E, "on", icon, label)
       if not (idle and lit) then return false end
     end
-    local off = own and colourAp(E, made, icon, colourOf(E, addr)) or idle
+    local off = own and colourAp(E, made, icon, colourOf(E, addr), not keep) or idle
     if off then E.C("Assign Appearance %d At %s", off, addr) done = true end
     for k = 1, 99 do
       local cue = string.format("%s Cue %d", addr, k)
       if not E.obj(cue) then break end
       -- (a picker's "Off" step: the dark disc)
-      local on = own and colourAp(E, made, icon, colourOf(E, cue)) or (E.objName(E.obj(cue)) == "Off" and idle or lit)
+      local on = own and colourAp(E, made, icon, colourOf(E, cue), not keep) or (E.objName(E.obj(cue)) == "Off" and idle or lit)
       if on then
         E.C("Assign Appearance %d At %s", on, cue)
         E.Cany({ string.format("Assign Appearance %d At %s Part 0", on, cue) })
@@ -11301,14 +11403,83 @@ local function iconButton(E, maps, made, keep, e)
       end
     end
   else
-    -- macros: the ALL row's lit; Off dark
-    local k = (label == "Off") and "idle" or "on"
-    local ap = own and colourAp(E, made, icon, colourOf(E, addr)) or (not own and discAp(E, k, icon, label))
+    -- macros: dark or lit as their look was (Off dark); the radio buttons' lines that switch
+    -- looks are pointed at these icons afterwards (fixLines)
+    local cur
+    pcall(function() cur = tonumber(E.obj(addr).Appearance.no) end)
+    local k = (label == "Off" or (cur and apState(E, cur) == "idle")) and "idle" or "on"
+    local ap = own and colourAp(E, made, icon, colourOf(E, addr), not keep) or (not own and discAp(E, k, icon, label))
     if ap then E.C("Assign Appearance %d At %s", ap, addr) done = true end
+    if done and iconed then iconed[no] = {icon = icon, label = label, own = own} end
   end
+  if done then pcall(function() e.VisibilityBorder = false end) end
   if done and top then pcall(function() e.CustomTextAlignmentV = "Bottom" end)
   elseif done and not keep then pcall(function() e.CustomTextText = "" end) end
   return done
+end
+
+-- "5", "5 Thru 8 + 10" -> {5, 6, 7, 8, 10}, or nil
+local function expandList(s)
+  local l = {}
+  for part in s:gmatch("[^+]+") do
+    local a, b = part:match("^%s*(%d+) Thru (%d+)%s*$")
+    if a then for k = tonumber(a), tonumber(b) do l[#l + 1] = k end
+    else
+      local n = tonumber(part:match("^%s*(%d+)%s*$") or "")
+      if not n then return nil end
+      l[#l + 1] = n
+    end
+  end
+  return l
+end
+
+-- one "Assign Appearance <aps> At Macro <list>" command with the icon macros' appearances swapped
+-- for their icons (an idle look -> the dark disc, a lit one -> the lit disc; keep look: the square
+-- icon on that colour). Anything else comes back as it was.
+local function fixCommand(E, made, keep, iconed, c)
+  local aps, ms = c:match("^%s*Assign Appearance (.-) At Macro (.-)%s*$")
+  local A, M = aps and expandList(aps), ms and expandList(ms)
+  if not (A and M) or not (#A == 1 or #A == #M) then return c end
+  local groups, order, changed = {}, {}, false
+  for i, m in ipairs(M) do
+    local a = #A == 1 and A[1] or A[i]
+    local ic = iconed[m]
+    if ic and ic.plain then
+      local new = apState(E, a) == "idle" and blackAp(E, made)
+      if new and new ~= a then a = new changed = true end
+    elseif ic then
+      local new = ic.own and colourAp(E, made, ic.icon, apColour(E, a), not keep) or (not ic.own and discAp(E, apState(E, a), ic.icon, ic.label))
+      if new and new ~= a then a = new changed = true end
+    end
+    if not groups[a] then groups[a] = {} order[#order + 1] = a end
+    table.insert(groups[a], m)
+  end
+  if not changed then return c end
+  local out = {}
+  for _, a in ipairs(order) do out[#out + 1] = string.format("Assign Appearance %d At Macro %s", a, E.rangeList(groups[a])) end
+  return table.concat(out, "; ")
+end
+
+-- the macros on the layouts whose lines switch looks (Normal / Pastel / Dark, 2 / 3 Steps, Small /
+-- Mid / Big, FS LOS's colours): their lines now switch between the icons, not the old looks
+local function fixLines(E, made, keep, iconed, macros)
+  for _, M in ipairs(macros) do
+    local h = E.obj("Macro " .. M)
+    local n = 0
+    pcall(function() n = h:Count() end)
+    for i = 1, n do
+      local line, cmd
+      pcall(function() line = h[i] cmd = tostring(line.Command or "") end)
+      if cmd and cmd:find("Assign Appearance", 1, true) then
+        local parts = {}
+        for c in (cmd .. ";"):gmatch("(.-);") do parts[#parts + 1] = fixCommand(E, made, keep, iconed, c) end
+        local new = table.concat(parts, "; "):gsub("^%s+", "")
+        if new ~= cmd and not pcall(function() line:Set("Command", new) end) then
+          E.C('Set Macro %d.%d Property "Command" %s', M, i, E.q(new))
+        end
+      end
+    end
+  end
 end
 
 local function applyIcons(E, keep)
@@ -11320,17 +11491,23 @@ local function applyIcons(E, keep)
     return {"No FS tool layouts in the show yet. Build FS Dimmer FX, FS Colour FX, FS Position Picker, FS Bumps ... first, then run " .. TITLE .. " again."}
   end
   local n, missed, used = 0, 0, 0
+  local iconed, macros = {}, {}
   for _, l in ipairs(layouts) do
     local count, any = 0, false
     pcall(function() count = l[2]:Count() end)
     for i = 1, count do
       local e
       pcall(function() e = l[2][i] end)
-      local r = e and iconButton(E, maps, made, keep, e)
+      local r = e and iconButton(E, maps, made, keep, e, iconed)
+      pcall(function()
+        local o = e.Object
+        if tostring(o:GetClass()) == "Macro" then macros[#macros + 1] = tonumber(o.no) or tonumber(o.No) end
+      end)
       if r then n = n + 1 any = true elseif r == false then missed = missed + 1 end
     end
     if any then used = used + 1 end
   end
+  fixLines(E, made, keep, iconed, macros)
   svar("keep", keep and "1" or "0")
   local lines = {}
   if n == 0 and missed > 0 then
@@ -11371,4 +11548,4 @@ local function main(displayHandle, argument)
   say(table.concat(lines, "\n"))
 end
 
-return main
+return rerunnable(main)

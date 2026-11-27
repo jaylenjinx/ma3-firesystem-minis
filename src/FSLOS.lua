@@ -369,7 +369,10 @@ local function buildLOS(E, groups, o)
     delayT = btn(B .. "Delay input", "Delay", TC0 + 1, 1, AP.idle, function(me)
       local v = losNum(V("delay"))
       return input(V("delay"), "LOS " .. b .. " Delay",
-        string.format('Set MAtricks %d Property "DelayFromX" "0" "DelayToX" %s; Set MAtricks %d Property "DelayFromX" %s "DelayToX" "0"', A, v, Bm, v), me.idx) end)
+        -- (one property per command, $var last: forwards had it last and worked, backwards had it
+        -- in the middle of the line and All < got no delay, Lyn 2026-11-27)
+        string.format('Set MAtricks %d Property "DelayFromX" "0"; Set MAtricks %d Property "DelayToX" %s; ' ..
+                      'Set MAtricks %d Property "DelayToX" "0"; Set MAtricks %d Property "DelayFromX" %s', A, A, v, Bm, Bm, v), me.idx) end)
     local chase = s0 + #BUMPS - 1
     btn(B .. "Off 0", "Off 0", TC0 + 2.25, 1, AP.idle, function()
       return {string.format("Set CueFade 0 Sequence %s Cue OffCue; Set CueFade 0 Sequence %d Cue 1 Thru 3", sAll, chase),
@@ -446,4 +449,4 @@ local function main(displayHandle, argument)
   pcall(Cmd, "Select Layout " .. o.L)
 end
 
-return main
+return rerunnable(main)

@@ -631,4 +631,4 @@ local function main(displayHandle, argument)
   pcall(Cmd, "Select Layout " .. o.L)
 end
 
-return main
+return rerunnable(main)

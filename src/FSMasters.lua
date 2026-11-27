@@ -295,4 +295,4 @@ local function main(displayHandle, argument)
   say(table.concat(lines, "\n"))
 end
 
-return main
+return rerunnable(main)
