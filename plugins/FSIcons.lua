@@ -11292,7 +11292,8 @@ local function iconButton(E, maps, made, keep, e)
     for k = 1, 99 do
       local cue = string.format("%s Cue %d", addr, k)
       if not E.obj(cue) then break end
-      local on = own and colourAp(E, made, icon, colourOf(E, cue)) or lit
+      -- (a picker's "Off" step: the dark disc)
+      local on = own and colourAp(E, made, icon, colourOf(E, cue)) or (E.objName(E.obj(cue)) == "Off" and idle or lit)
       if on then
         E.C("Assign Appearance %d At %s", on, cue)
         E.Cany({ string.format("Assign Appearance %d At %s Part 0", on, cue) })
