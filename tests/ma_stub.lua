@@ -93,6 +93,8 @@ function M.new()
     if lk then stub.objects[lk .. " " .. lno] = name end
     local dk, dno = c:match("^Delete (%a+) ([%d.]+)")
     if dk and not c:find("Thru") then stub.objects[dk .. " " .. dno] = nil handles[dk .. " " .. dno] = nil end
+    local img = c:match("^Import Image ([%d.]+) ")   -- (an import finds its file: the image exists)
+    if img and stub.images then stub.objects["Image " .. img] = true end
     local L = c:match("^Assign .- At Layout (%d+)$")
     local lh = L and handle("Layout " .. L)
     if lh then lh.elements[#lh.elements + 1] = {} end

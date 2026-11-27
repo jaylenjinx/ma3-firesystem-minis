@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <GMA3 DataVersion="2.0.0.0">
-	<Plugin Name="FS Bumps" Version="1.7.0" Author="FireSystem">
+	<Plugin Name="FS Bumps" Version="1.8.0" Author="FireSystem">
 		<ComponentLua Name="FSBumps" FileName="FSBumps.lua" />
 	</Plugin>
 </GMA3>
