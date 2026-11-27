@@ -94,6 +94,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li><a href="#los">FS LOS</a></li>
         <li><a href="#masters">FS Masters</a></li>
         <li><a href="#icons">FS Icons</a></li>
+        <li><a href="#utility">FS Utility</a></li>
       </ul>
       <h4>More</h4>
       <ul>
@@ -124,6 +125,7 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
       <a class="card" href="#los"><b>FS LOS</b><span>Live Output System bumps, StartShow style</span></a>
       <a class="card" href="#masters"><b>FS Masters</b><span>FireSystem&#39;s executor page 1: keys, group masters, speed masters</span></a>
       <a class="card" href="#icons"><b>FS Icons</b><span>FireSystem&#39;s icons on the other tools&#39; buttons</span></a>
+      <a class="card" href="#utility"><b>FS Utility</b><span>Reimport, run again or delete all the tools</span></a>
     </div>
 
     <h2 id="install">Install</h2>
@@ -268,6 +270,16 @@ footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line);
         <li>Tick <i>Keep each button&#39;s colour and text</i> to keep every button&#39;s colours and text, with the square icon on top.</li>
         <li>Group buttons keep their text. Appearance slots holding something that isn&#39;t FireSystem&#39;s are left alone.</li>
         <li>Every image is inside FSIcons.lua: nothing else to copy. Run it again after rebuilding a tool; to go back to plain buttons, rebuild that tool.</li>
+      </ul>
+    </section>
+
+    <section class="tool" id="utility">
+      <h2>FS Utility</h2>
+      <p class="file">FSUtility.xml</p>
+      <ul class="points">
+        <li><b>Reimport from console / USB</b>: imports every FS plugin again from <code>gma3_library/datapools/plugins</code> on the console or on a USB stick, over each tool&#39;s own slot in the Plugins pool. New ones go in the first free slot. FireSystem.xml comes along if it&#39;s there.</li>
+        <li><b>Run all again</b>: runs the ticked tools in build order, FS Presets first and FS Icons last. Each opens its dialog with its last settings.</li>
+        <li><b>Delete all</b>: deletes what the ticked tools made (layouts, macros, sequences, MAtricks, presets, appearances, FS Icons&#39; images), only objects named with the tool&#39;s tag. It asks first. FS Presets&#39; presets and FireSystem&#39;s icons are only offered when FireSystem isn&#39;t in the show.</li>
       </ul>
     </section>
 
