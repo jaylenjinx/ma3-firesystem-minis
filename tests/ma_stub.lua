@@ -59,6 +59,14 @@ function M.new()
       h.Delete = function(self, i) table.remove(self.elements, i) end
       h.Children = function(self) return self.elements end
       h.GetClass = function() return path:match("^(%a+)") end
+      -- macro lines: m:Append() adds one; line:Set("Command", text) / line:Get("Command")
+      h.Append = function(self)
+        local line = {}
+        line.Set = function(l, k, v) l[k] = v end
+        line.Get = function(l, k) return l[k] end
+        self.elements[#self.elements + 1] = line
+        return line
+      end
       setmetatable(h, {__index = function(t, k)
         if type(k) == "number" then return t.elements[k] end
         if k == "name" or k == "Name" then local v = stub.objects[path] return type(v) == "string" and v or path end

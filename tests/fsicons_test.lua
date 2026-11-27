@@ -236,3 +236,63 @@ test("a picker's Off step shows the dark disc, its other steps the lit one", fun
   end
   t.ok(checked > 0, "no Gobo Beam picker with an Off step got a disc")
 end)
+
+-- the macros' own lines that swap appearances (radio buttons: Normal / Pastel / Dark, the step
+-- counts, the sizes) must swap the icon ones, or the icon goes after one click
+local function lines(stub, p)
+  local t = {}
+  for _, l in ipairs(stub.G.ObjectList(p)[1].elements) do t[#t + 1] = l:Get("Command") or "" end
+  return table.concat(t, "; ")
+end
+test("radio macros swap the icon appearances, so the icons stay after a click", function()
+  local stub = all()
+  run(stub)
+  for _, label in ipairs({"FS CP Front Pastel", "FS PP Front FX Small", "FS CF Front 3 Steps"}) do
+    local m
+    for p, v in pairs(stub.objects) do
+      if p:match("^Macro %d+$") and type(v) == "string" and (v == label or v:find(label .. "$", 1, true)) then m = p end
+    end
+    if not m then
+      -- (names differ per tool: find the macro by its layout text)
+      for p, v in pairs(stub.objects) do
+        if p:match("^Macro %d+$") and type(v) == "string" and v:find(label:match("%S+$") .. "$") and v:find("^" .. label:match("^FS %u%u")) then m = p end
+      end
+    end
+    t.ok(m, "no macro like " .. label)
+    local text = lines(stub, m)
+    local any = false
+    for ap in text:gmatch("Assign Appearance (%d+) At Macro") do
+      any = true
+      local n = stub.objects["Appearance " .. ap]
+      t.ok(type(n) == "string" and (n:find("^FS ic ") or n:find("^FS r ") or n:find("^FS IC ")), m .. " (" .. label .. ") still swaps in Appearance " .. ap .. " " .. tostring(n) .. ": " .. text)
+    end
+    t.ok(any, m .. " has no appearance swap: " .. text)
+    -- the pressed one gets the lit look, the others the idle one (the same as before the click)
+    local own = text:match("Assign Appearance (%d+) At Macro " .. m:match("%d+") .. "[;%s]") or text:match("Assign Appearance (%d+) At Macro " .. m:match("%d+") .. "$")
+    t.ok(own, m .. " doesn't swap itself: " .. text)
+    local idle = stub.objects["Appearance " .. (text:match("Assign Appearance (%d+) At Macro %d+", text:find(own, 1, true) + #own) or "")]
+    t.ok(stub.objects["Appearance " .. own] ~= idle, m .. " gives itself the idle look: " .. text)
+  end
+end)
+
+test("value buttons' grey backgrounds go black; lit ones keep their colour; no borders", function()
+  local stub = all()
+  run(stub)
+  local black, lit = false, false
+  for p in pairs(stub.objects) do
+    if p:match("^Layout %d+$") then
+      for _, e in ipairs(stub.G.ObjectList(p)[1].elements) do
+        if e.what and not e.what:match("^Group") then t.eq(e.VisibilityBorder, false, e.what .. " border") end
+      end
+    end
+    local n = stub.objects[p]
+    if p:match("^Appearance %d+$") and type(n) == "string" and n:find("^FS IC t:") then
+      local rgb = stub.rgb[tonumber(p:match("%d+"))]
+      t.ok(not (rgb[1] == rgb[2] and rgb[2] == rgb[3] and rgb[1] > 0 and rgb[1] < 128), n .. " is still grey")
+      if rgb[1] == 0 and rgb[2] == 0 and rgb[3] == 0 then black = true end
+      if rgb[1] > 128 or rgb[2] > 128 or rgb[3] > 128 then lit = true end
+    end
+  end
+  t.ok(black, "no black top icon")
+  t.ok(lit, "no lit top icon")
+end)

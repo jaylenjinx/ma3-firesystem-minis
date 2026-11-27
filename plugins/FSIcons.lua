@@ -11217,9 +11217,12 @@ local function colourOf(E, addr)
 end
 
 -- an appearance with this colour and an image on it (keep look, top icons), or nil
+-- (top icons: a grey "off" background goes black, Lyn 2026-11-27)
 local function colourAp(E, made, icon, rgb)
   if not rgb then return nil end
   local kk, n = icon:match("^(%a+):(.+)$")
+  local hi, lo = math.max(rgb[1], rgb[2], rgb[3]), math.min(rgb[1], rgb[2], rgb[3])
+  if kk == "t" and hi < 128 and hi - lo < 16 then rgb = {0, 0, 0} end
   if kk == "sw" then return nil end   -- (colour buttons already show their colour)
   local key = string.format("%s %d.%d.%d", icon, rgb[1], rgb[2], rgb[3])
   if made[key] ~= nil then return made[key] or nil end
@@ -11306,15 +11309,102 @@ local function iconButton(E, maps, made, keep, e)
     local ap = own and colourAp(E, made, icon, colourOf(E, addr)) or (not own and discAp(E, k, icon, label))
     if ap then E.C("Assign Appearance %d At %s", ap, addr) done = true end
   end
+  if done and kind == "Macro" then made.macros[no] = {icon = icon, own = own, label = label} end
   if done and top then pcall(function() e.CustomTextAlignmentV = "Bottom" end)
   elseif done and not keep then pcall(function() e.CustomTextText = "" end) end
   return done
 end
 
+-- an appearance's state ("on" / "idle"): from our own names, else how bright it is
+local function stateOf(E, ap)
+  local name = tostring(E.objName(E.obj("Appearance " .. ap)) or "")
+  if name:find("_o$") or name:find(" on$") or name:find(" lit$") then return "on" end
+  if name:find("_i$") or name:find(" idle$") or name:find(" off$") then return "idle" end
+  local rgb = colourOf(E, "Appearance " .. ap) or (function()
+    local h, c = E.obj("Appearance " .. ap), nil
+    pcall(function() c = {tonumber(h.BackR), tonumber(h.BackG), tonumber(h.BackB)} end)
+    return c and c[1] and c or nil
+  end)()
+  return (rgb and math.max(rgb[1], rgb[2], rgb[3]) > 120) and "on" or "idle"
+end
+
+-- "5001 Thru 5003 + 5005" -> {5001, 5002, 5003, 5005}
+local function expand(list)
+  local t = {}
+  for part in (list .. "+"):gmatch("%s*(.-)%s*%+") do
+    local a, b = part:match("^(%d+)%s+[Tt]hru%s+(%d+)$")
+    if a then for k = tonumber(a), tonumber(b) do t[#t + 1] = k end
+    elseif tonumber(part) then t[#t + 1] = tonumber(part) end
+  end
+  return t
+end
+
+-- The tools' radio macros swap appearances themselves ("Assign Appearance <lit> At Macro 5001;
+-- Assign Appearance <idle> At Macro 5002 + 5003"): point those at the icon appearances, or the
+-- icons go after one click. Returns how many lines changed.
+local function fixSwaps(E, made)
+  local changed = 0
+  local function want(M, X)
+    local m = made.macros[M]
+    if not m then return X end
+    local ap
+    if m.own then
+      local rgb
+      pcall(function() local h = E.obj("Appearance " .. X) rgb = {tonumber(h.BackR), tonumber(h.BackG), tonumber(h.BackB)} end)
+      ap = rgb and rgb[1] and colourAp(E, made, m.icon, rgb)
+    else
+      ap = discAp(E, stateOf(E, X), m.icon, m.label)
+    end
+    return ap or X
+  end
+  local function rewrite(cmd)
+    local out, did = {}, false
+    for seg in (cmd .. ";"):gmatch("(.-);") do
+      local X, list = seg:match("^%s*Assign Appearance (%d+) At Macro (.+)$")
+      if X then
+        local by, order = {}, {}
+        for _, M in ipairs(expand(list)) do
+          local ap = want(M, tonumber(X))
+          if ap ~= tonumber(X) then did = true end
+          if not by[ap] then by[ap] = {} order[#order + 1] = ap end
+          table.insert(by[ap], M)
+        end
+        for _, ap in ipairs(order) do
+          out[#out + 1] = string.format("Assign Appearance %d At Macro %s", ap, E.rangeList(by[ap]))
+        end
+      elseif seg:match("%S") then
+        out[#out + 1] = seg:match("^%s*(.-)%s*$")
+      end
+    end
+    return did and table.concat(out, "; ") or nil
+  end
+  -- every FS macro whose lines swap an iconed macro's appearance (they sit with the iconed ones)
+  local seen = {}
+  for M in pairs(made.macros) do
+    for d = -12, 12 do
+      local no = M + d
+      local h = not seen[no] and E.obj("Macro " .. no)
+      seen[no] = true
+      local name = h and tostring(E.objName(h) or "")
+      if h and name:sub(1, #E.CFG.PREFIX + 1) == E.CFG.PREFIX .. " " then
+        local n = 0
+        pcall(function() n = h:Count() end)
+        for i = 1, n do
+          local line, cmd
+          pcall(function() line = h[i] cmd = line:Get("Command") end)
+          local new = cmd and cmd:find("Assign Appearance %d+ At Macro") and rewrite(cmd)
+          if new and pcall(function() line:Set("Command", new) end) then changed = changed + 1 end
+        end
+      end
+    end
+  end
+  return changed
+end
+
 local function applyIcons(E, keep)
   E.failures = {}
   E.FireSystemIconData = ICON_DATA   -- (the modules' image import writes the PNGs from it)
-  local maps, made = iconMaps(E), {}
+  local maps, made = iconMaps(E), {macros = {}}
   local layouts = toolLayouts(E)
   if #layouts == 0 then
     return {"No FS tool layouts in the show yet. Build FS Dimmer FX, FS Colour FX, FS Position Picker, FS Bumps ... first, then run " .. TITLE .. " again."}
@@ -11327,10 +11417,13 @@ local function applyIcons(E, keep)
       local e
       pcall(function() e = l[2][i] end)
       local r = e and iconButton(E, maps, made, keep, e)
+      -- no borders round the buttons (Lyn 2026-11-27)
+      if e then pcall(function() if e.Object and tostring(e.Object:GetClass()) ~= "Group" then e.VisibilityBorder = false end end) end
       if r then n = n + 1 any = true elseif r == false then missed = missed + 1 end
     end
     if any then used = used + 1 end
   end
+  fixSwaps(E, made)
   svar("keep", keep and "1" or "0")
   local lines = {}
   if n == 0 and missed > 0 then

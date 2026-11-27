@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <GMA3 DataVersion="2.0.0.0">
-	<Plugin Name="FS LOS" Version="1.9.0" Author="FireSystem">
+	<Plugin Name="FS LOS" Version="1.9.1" Author="FireSystem">
 		<ComponentLua Name="FSLOS" FileName="FSLOS.lua" />
 	</Plugin>
 </GMA3>
